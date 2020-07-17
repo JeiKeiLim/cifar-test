@@ -23,7 +23,7 @@ if __name__ == "__main__":
         "effnetb7": efn.EfficientNetB7,
         "effnetl2": efn.EfficientNetL2,
         "resnet101": tf.keras.applications.ResNet101,
-        "resnet101V2": tf.keras.applications.ResNet101V2,
+        "resnet101v2": tf.keras.applications.ResNet101V2,
         "resnet50": tf.keras.applications.ResNet50,
         "resnet50v2": tf.keras.applications.ResNet50V2,
         "resnet152": tf.keras.applications.ResNet152,
