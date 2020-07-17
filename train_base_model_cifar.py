@@ -131,6 +131,6 @@ if __name__ == "__main__":
 
     run_tensorboard(tboard_root)
 
-    n_model.fit(train_set, steps_per_epoch=10, validation_steps=10, epochs=args.epochs, validation_data=test_set, callbacks=callbacks)
+    n_model.fit(train_set, epochs=args.epochs, validation_data=test_set, callbacks=callbacks)
 
     wait_ctrl_c()
