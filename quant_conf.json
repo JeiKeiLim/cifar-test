@@ -1,0 +1,7 @@
+{
+  "quantization": false,
+  "quantization_type": "int8",
+  "tf_ops": false,
+  "exp_converter": false,
+  "out_path": "./models/mobilenetv2_cifar_quant.tflite"
+}

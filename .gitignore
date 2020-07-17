@@ -1,0 +1,5 @@
+*.h5
+*.tflite
+.idea
+__pycache__
+Export
