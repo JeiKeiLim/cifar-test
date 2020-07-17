@@ -1,0 +1,2 @@
+tfhelper>=0.0.24
+efficientnet>=1.1.0
