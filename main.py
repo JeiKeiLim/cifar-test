@@ -1,5 +1,5 @@
 import tensorflow as tf
-from cifar_generator import Cifar100Generator
+from cifar_generator import CifarGenerator
 import tensorflow_model_optimization as tfmot
 import argparse
 import numpy as np
@@ -92,8 +92,8 @@ if __name__ == "__main__":
 
     model.summary()
 
-    train_gen = Cifar100Generator(x_train, y_train.flatten(), augment=True, model_type=model_name)
-    test_gen = Cifar100Generator(x_test, y_test.flatten(), augment=False, model_type=model_name)
+    train_gen = CifarGenerator(x_train, y_train.flatten(), augment=True, model_type=model_name)
+    test_gen = CifarGenerator(x_test, y_test.flatten(), augment=False, model_type=model_name)
 
     train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch*2)
     test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)

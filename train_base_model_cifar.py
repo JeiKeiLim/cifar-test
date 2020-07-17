@@ -1,5 +1,5 @@
 import tensorflow as tf
-from cifar_generator import Cifar100Generator
+from cifar_generator import CifarGenerator
 import efficientnet.tfkeras as efn
 import argparse
 from tfhelper.tensorboard import get_tf_callbacks, run_tensorboard, wait_ctrl_c
@@ -9,12 +9,33 @@ from models import resnet
 if __name__ == "__main__":
 
     model_dict = {
+        "vgg16": tf.keras.applications.VGG16,
+        "vgg19": tf.keras.applications.VGG19,
         "mobilenetv2": tf.keras.applications.MobileNetV2,
         "mobilenetv1": tf.keras.applications.MobileNet,
+        "effnetb0": efn.EfficientNetB0,
+        "effnetb1": efn.EfficientNetB1,
+        "effnetb2": efn.EfficientNetB2,
+        "effnetb3": efn.EfficientNetB3,
+        "effnetb4": efn.EfficientNetB4,
+        "effnetb5": efn.EfficientNetB5,
+        "effnetb6": efn.EfficientNetB6,
         "effnetb7": efn.EfficientNetB7,
+        "effnetl2": efn.EfficientNetL2,
+        "resnet101": tf.keras.applications.ResNet101,
+        "resnet101V2": tf.keras.applications.ResNet101V2,
         "resnet50": tf.keras.applications.ResNet50,
         "resnet50v2": tf.keras.applications.ResNet50V2,
+        "resnet152": tf.keras.applications.ResNet152,
         "resnet152v2": tf.keras.applications.ResNet152V2,
+        "inceptionv3": tf.keras.applications.InceptionV3,
+        "inceptionresnetv2": tf.keras.applications.InceptionResNetV2,
+        "densenet121": tf.keras.applications.DenseNet121,
+        "densenet169": tf.keras.applications.DenseNet169,
+        "densenet201": tf.keras.applications.DenseNet201,
+        "nasnetlarge": tf.keras.applications.NASNetLarge,
+        "nasnetmobile": tf.keras.applications.NASNetMobile,
+        "xception": tf.keras.applications.Xception,
         "resnet18": resnet.ResNet18,
         "resnet10": resnet.ResNet10
     }
@@ -94,8 +115,8 @@ if __name__ == "__main__":
     n_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
                     loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
-    train_gen = Cifar100Generator(x_train, y_train.flatten(), augment=True, model_type=args.model, image_size=(args.img_w, args.img_h))
-    test_gen = Cifar100Generator(x_test, y_test.flatten(), augment=False, model_type=args.model, image_size=(args.img_w, args.img_h))
+    train_gen = CifarGenerator(x_train, y_train.flatten(), augment=True, model_type=args.model, image_size=(args.img_w, args.img_h))
+    test_gen = CifarGenerator(x_test, y_test.flatten(), augment=False, model_type=args.model, image_size=(args.img_w, args.img_h))
 
     train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch*2)
     test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
