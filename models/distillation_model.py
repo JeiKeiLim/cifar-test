@@ -1,6 +1,6 @@
 import tensorflow as tf
 from models import ResNet
-import numpy as np
+
 
 
 class DistillationModel:
@@ -68,8 +68,10 @@ class DistillationGenerator:
         self.n_class = teacher_model.output.shape[1]
 
     def __call__(self):
+        generator = self.base_generator()
+
         for i in range(self.n_data):
-            d, l = next(self.base_generator)
+            d, l = next(generator)
 
             if self.from_teacher:
                 teacher_result = self.teacher_model.predict(tf.expand_dims(d, axis=0))

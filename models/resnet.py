@@ -55,6 +55,7 @@ class ResNet:
 
         return model
 
+
 class ResNet18(ResNet):
     def __init__(self, input_shape=(None, None, 3), n_classes=0, include_top=False, weights=None):
         ResNet.__init__(self, input_shape=input_shape, n_classes=n_classes, n_layer=18)

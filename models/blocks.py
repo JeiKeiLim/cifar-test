@@ -1,8 +1,9 @@
 import tensorflow as tf
 
+
 class BottleNeckBlock:
-    def __init__(self, n_filter, kernel_size, downsample=False, padding='SAME', use_bias=True,
-                 activation=tf.keras.layers.ReLU, name="bottle_resblock"):
+    def __init__(self, n_filter, kernel_size, downsample=False, downsample_strides=(2, 2), padding='SAME', use_bias=True,
+                 activation=tf.keras.layers.ReLU, name="bottle_resblock", out_filter_multiplier=4):
         self.n_filter = n_filter
         self.kernel_size = kernel_size
         self.downsample = downsample
@@ -10,9 +11,11 @@ class BottleNeckBlock:
         self.activation = activation
         self.name = name
         self.use_bias = use_bias
+        self.downsample_strides = downsample_strides
+        self.out_filter_multiplier = out_filter_multiplier
 
     def __call__(self, layer):
-        strides = (2, 2) if self.downsample else (1, 1)
+        strides = self.downsample_strides if self.downsample else (1, 1)
 
         x = ConvBN(self.n_filter, (1, 1), strides=(1, 1), padding=self.padding, use_bias=self.use_bias,
                    name=f"{self.name}_conv_bn_front")(layer)
@@ -20,14 +23,14 @@ class BottleNeckBlock:
         x = tf.keras.layers.Conv2D(self.n_filter, self.kernel_size, strides=strides, use_bias=self.use_bias,
                                    activation=None, padding=self.padding,
                                    name="{}_{}x{}conv_0".format(self.name, self.kernel_size[0], self.kernel_size[1]))(x)
-        if layer.shape[-1] != self.n_filter*4:
-            layer = tf.keras.layers.Conv2D(self.n_filter*4, (1, 1), strides=strides, use_bias=self.use_bias,
+        if layer.shape[-1] != self.out_filter_multiplier:
+            layer = tf.keras.layers.Conv2D(self.n_filter*self.out_filter_multiplier, (1, 1), strides=strides, use_bias=self.use_bias,
                                            activation=None, padding=self.padding,
                                            name=f"{self.name}_1x1conv_init")(layer)
 
         x = tf.keras.layers.BatchNormalization(name=f"{self.name}_bn_0")(x)
         x = self.activation(name=f"{self.name}_activation_0")(x)
-        x = tf.keras.layers.Conv2D(self.n_filter*4, (1, 1), strides=(1, 1), use_bias=self.use_bias, name=f"{self.name}_1x1conv_1")(x)
+        x = tf.keras.layers.Conv2D(self.n_filter*self.out_filter_multiplier, (1, 1), strides=(1, 1), use_bias=self.use_bias, name=f"{self.name}_1x1conv_1")(x)
 
         x_layer = tf.keras.layers.Add(name=f"{self.name}_residual")([x, layer])
         x_layer = tf.keras.layers.BatchNormalization(name=f"{self.name}_bn_1")(x_layer)

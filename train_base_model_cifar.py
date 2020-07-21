@@ -123,8 +123,7 @@ if __name__ == "__main__":
         teacher_model = tf.keras.models.load_model(args.teacher)
         distillation_model = DistillationModel(teacher_model, n_model, temperature=args.temperature)
 
-        teacher_test_gen = DistillationGenerator(test_gen(), test_gen.data.shape[0], teacher_model, from_teacher=False)
-        test_set = teacher_test_gen.get_tf_dataset(args.batch, shuffle=False)
+        test_set = CifarGenerator(x_test, y_test.flatten(), augment=False, model_type=args.model, image_size=(args.img_w, args.img_h)).get_tf_dataset(args.batch, shuffle=False)
 
         teacher_model.compile(loss='sparse_categorical_crossentropy', metrics=['accuracy'])
         distillation_model.evaluate_teacher(test_set=test_set)
@@ -134,22 +133,19 @@ if __name__ == "__main__":
         distillation_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr))
         n_model = distillation_model.student_model
 
-        train_gen = DistillationGenerator(train_gen(), train_gen.data.shape[0], teacher_model, from_teacher=True)
-        test_gen = DistillationGenerator(test_gen(), test_gen.data.shape[0], teacher_model, from_teacher=True)
+        train_gen = DistillationGenerator(train_gen, train_gen.data.shape[0], teacher_model, from_teacher=True)
+        test_gen = DistillationGenerator(test_gen, test_gen.data.shape[0], teacher_model, from_teacher=True)
 
-        train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch*2)
-        test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
         save_metric = 'val_metric_accuracy'
         tboard_path = "./export/{}_distill".format(args.model)
     else:
         n_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
                         loss='sparse_categorical_crossentropy', metrics=['accuracy'])
         save_metric = 'val_accuracy'
-
-        train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch*2)
-        test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
-
         tboard_path = "./export/{}".format(args.model)
+
+    train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch*2)
+    test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
 
     callbacks, tboard_root = get_tf_callbacks(tboard_path, tboard_callback=True,
                                               confuse_callback=False, test_dataset=test_set, save_metric=save_metric,
