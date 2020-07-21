@@ -4,7 +4,8 @@ import efficientnet.tfkeras as efn
 import argparse
 from tfhelper.tensorboard import get_tf_callbacks, run_tensorboard, wait_ctrl_c
 from tfhelper.gpu import allow_gpu_memory_growth
-from models import resnet
+from models import resnet, DistillationModel, DistillationGenerator
+
 
 if __name__ == "__main__":
 
@@ -56,6 +57,9 @@ if __name__ == "__main__":
     parser.add_argument("--summary", dest="summary", action="store_true", default=False, help="Display a summary of the model and exit")
     parser.add_argument("--img_w", default=224, type=int, help="Image Width (Default: 224)")
     parser.add_argument("--img_h", default=224, type=int, help="Image Height (Default: 224)")
+    parser.add_argument("--distill", default=False, action='store_true', help="Perform Distillation")
+    parser.add_argument("--teacher", default="", type=str, help="Teacher Model Path")
+    parser.add_argument("--temperature", default=2.0, type=float, help="Soft Label Temperature")
 
     args = parser.parse_args()
 
@@ -112,19 +116,42 @@ if __name__ == "__main__":
     if args.summary:
         exit(0)
 
-    n_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
-                    loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-
     train_gen = CifarGenerator(x_train, y_train.flatten(), augment=True, model_type=args.model, image_size=(args.img_w, args.img_h))
     test_gen = CifarGenerator(x_test, y_test.flatten(), augment=False, model_type=args.model, image_size=(args.img_w, args.img_h))
 
-    train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch*2)
-    test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
+    if args.distill and args.teacher != "":
+        teacher_model = tf.keras.models.load_model(args.teacher)
+        distillation_model = DistillationModel(teacher_model, n_model, temperature=args.temperature)
+
+        teacher_test_gen = DistillationGenerator(test_gen(), test_gen.data.shape[0], teacher_model, from_teacher=False)
+        test_set = teacher_test_gen.get_tf_dataset(args.batch, shuffle=False)
+
+        teacher_model.compile(loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        distillation_model.evaluate_teacher(test_set=test_set)
+
+        print("Teacher Model Loss: {:.5f}, Accuracy: {:.5f}".format(distillation_model.teacher_loss, distillation_model.teacher_accuracy))
+
+        distillation_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr))
+        n_model = distillation_model.student_model
+
+        train_gen = DistillationGenerator(train_gen(), train_gen.data.shape[0], teacher_model, from_teacher=True)
+        test_gen = DistillationGenerator(test_gen(), test_gen.data.shape[0], teacher_model, from_teacher=True)
+
+        train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch*2)
+        test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
+        save_metric = 'val_metric_accuracy'
+    else:
+        n_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
+                        loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        save_metric = 'val_accuracy'
+
+        train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch*2)
+        test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
 
     tboard_path = "./export/{}".format(args.model)
 
     callbacks, tboard_root = get_tf_callbacks(tboard_path, tboard_callback=True,
-                                              confuse_callback=True, test_dataset=test_set, save_metric='val_accuracy',
+                                              confuse_callback=False, test_dataset=test_set, save_metric=save_metric,
                                               modelsaver_callback=True,
                                               earlystop_callback=False,
                                               sparsity_callback=True, sparsity_threshold=0.05)
