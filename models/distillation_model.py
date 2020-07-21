@@ -72,10 +72,10 @@ class DistillationGenerator:
             d, l = next(self.base_generator)
 
             if self.from_teacher:
-                teacher_result = self.teacher_model.predict(np.expand_dims(d, axis=0))
+                teacher_result = self.teacher_model.predict(tf.expand_dims(d, axis=0))
 
-                l = tf.keras.utils.to_categorical([l], num_classes=self.n_class)
-                l = np.concatenate([l, teacher_result], axis=0)
+                l = tf.expand_dims(tf.one_hot(l, self.n_class, dtype=tf.float32), axis=0)
+                l = tf.concat([l, teacher_result], axis=0)
 
             yield d, l
 
