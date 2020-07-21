@@ -140,6 +140,7 @@ if __name__ == "__main__":
         train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch*2)
         test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
         save_metric = 'val_metric_accuracy'
+        tboard_path = "./export/{}_distill".format(args.model)
     else:
         n_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
                         loss='sparse_categorical_crossentropy', metrics=['accuracy'])
@@ -148,7 +149,7 @@ if __name__ == "__main__":
         train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch*2)
         test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
 
-    tboard_path = "./export/{}".format(args.model)
+        tboard_path = "./export/{}".format(args.model)
 
     callbacks, tboard_root = get_tf_callbacks(tboard_path, tboard_callback=True,
                                               confuse_callback=False, test_dataset=test_set, save_metric=save_metric,
