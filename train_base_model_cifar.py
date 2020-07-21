@@ -60,6 +60,7 @@ if __name__ == "__main__":
     parser.add_argument("--distill", default=False, action='store_true', help="Perform Distillation")
     parser.add_argument("--teacher", default="", type=str, help="Teacher Model Path")
     parser.add_argument("--temperature", default=2.0, type=float, help="Soft Label Temperature")
+    parser.add_argument("--tboard-port", default=6006, type=int, help="TensorBoard Port Number")
 
     args = parser.parse_args()
 
@@ -121,6 +122,7 @@ if __name__ == "__main__":
 
     if args.distill and args.teacher != "":
         teacher_model = tf.keras.models.load_model(args.teacher)
+        teacher_model.trainable=False
         distillation_model = DistillationModel(teacher_model, n_model, temperature=args.temperature)
 
         test_set = CifarGenerator(x_test, y_test.flatten(), augment=False, model_type=args.model, image_size=(args.img_w, args.img_h)).get_tf_dataset(args.batch, shuffle=False)
@@ -153,7 +155,7 @@ if __name__ == "__main__":
                                               earlystop_callback=False,
                                               sparsity_callback=True, sparsity_threshold=0.05)
 
-    run_tensorboard(tboard_root)
+    run_tensorboard(tboard_root, port=args.tboard_port)
 
     n_model.fit(train_set, epochs=args.epochs, validation_data=test_set, callbacks=callbacks)
 
