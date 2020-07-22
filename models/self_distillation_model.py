@@ -1,6 +1,7 @@
 import tensorflow as tf
 from models import BottleNeckBlock, ConvBN
 from models import ResNet, ResNet18, ResNet10
+from functools import partial
 
 
 class SelfDistillationModel:
@@ -42,12 +43,16 @@ class SelfDistillationModel:
             distill_outs_feat[i] = tf.expand_dims(distill_outs_feat[i], axis=-1)
             distill_outs_logit[i] = tf.expand_dims(distill_outs_logit[i], axis=-1)
 
-        distill_outs_feat = tf.keras.layers.Concatenate()(distill_outs_feat)
-        distill_outs_logit = tf.keras.layers.Concatenate()(distill_outs_logit)
+        distill_outs_feat = tf.keras.layers.Concatenate(name="out_feats")(distill_outs_feat)
+        distill_outs_logit = tf.keras.layers.Concatenate(name="out_logits")(distill_outs_logit)
 
         self.distill_model = tf.keras.models.Model(self.model.input, [model.output, distill_outs_feat, distill_outs_logit])
 
         return self.distill_model
+
+    def loss_out(self, y_true, y_pred):
+        out_loss = tf.reduce_mean(tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred))
+        return out_loss
 
     def loss_feat(self, y_true, y_pred):
         y_pred = tf.split(y_pred, self.n_out//2, axis=-1)
@@ -75,9 +80,37 @@ class SelfDistillationModel:
 
         return logit_loss
 
-    def loss_out(self, y_true, y_pred):
-        out_loss = tf.reduce_mean(tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred))
-        return out_loss
+    def metrics(self, y_true, y_pred):
+        if tf.shape(y_pred).shape == 2:
+            return self.metric_out_accuracy(y_true, y_pred)
+        elif tf.shape(y_pred).shape == 5:
+            return self.metric_feat_loss(y_true, y_pred)
+        elif tf.shape(y_pred).shape == 3:
+            return self.metric_logit_accuracy(y_true, y_pred)
+
+    def metric_out_accuracy(self, y_true, y_pred):
+        if tf.shape(y_pred).shape == 2:
+            return tf.keras.metrics.sparse_categorical_accuracy(y_true, y_pred)
+        else:
+            return -1
+
+    def metric_feat_loss(self, y_true, y_pred, i=0):
+        feat_loss = -1
+        if tf.shape(y_pred).shape == 5:
+            y_pred = tf.split(y_pred, self.n_out // 2, axis=-1)
+            feat_true, feat_pred = y_pred[-1], y_pred[:-1]
+            feat_loss = tf.reduce_mean(tf.keras.losses.mean_squared_error(feat_true, feat_pred[i]))
+
+        return feat_loss
+
+    def metric_logit_accuracy(self, y_true, y_pred, i=0):
+        logit_loss = -1
+        if tf.shape(y_pred).shape == 3:
+            y_pred = tf.split(y_pred, self.n_out // 2, axis=-1)
+
+            logit_loss = tf.keras.metrics.sparse_categorical_accuracy(y_true, y_pred[i])
+
+        return logit_loss
 
 
 if __name__ == "__main__":
@@ -91,7 +124,21 @@ if __name__ == "__main__":
 
     self_distiller = SelfDistillationModel(model, out_layer_names , final_n_filter, final_feat_layer_name, temperature=2.0)
     distill_model = self_distiller.build_model()
-    distill_model.compile(optimizer='adam', loss=[self_distiller.loss_out, self_distiller.loss_feat, self_distiller.loss_logit], loss_weights=[1.0, 0.001, 1.0])
+
+    metrics = [
+        self_distiller.metric_out_accuracy,
+    ]
+    for i in range(3):
+        p_func = partial(self_distiller.metric_feat_loss, i=i)
+        p_func.__name__ = f"feat_metric_{i}"
+        metrics.append(p_func)
+    for i in range(3):
+        p_func = partial(self_distiller.metric_logit_accuracy, i=i)
+        p_func.__name__ = f"logit_metric_{i}"
+        metrics.append(p_func)
+
+    distill_model.compile(optimizer='adam', loss=[self_distiller.loss_out, self_distiller.loss_feat, self_distiller.loss_logit],
+                          loss_weights=[1.0, 0.001, 1.0], metrics=metrics)
 
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
     distill_model.fit(x_train, y_train, epochs=1)
