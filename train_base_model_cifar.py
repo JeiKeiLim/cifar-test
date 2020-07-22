@@ -4,7 +4,7 @@ import efficientnet.tfkeras as efn
 import argparse
 from tfhelper.tensorboard import get_tf_callbacks, run_tensorboard, wait_ctrl_c
 from tfhelper.gpu import allow_gpu_memory_growth
-from models import resnet, DistillationModel, DistillationGenerator, SelfDistillationModel
+from models import resnet, DistillationModel, SelfDistillationModel
 
 
 if __name__ == "__main__":
@@ -59,6 +59,7 @@ if __name__ == "__main__":
     parser.add_argument("--img_h", default=224, type=int, help="Image Height (Default: 224)")
     parser.add_argument("--distill", default=False, action='store_true', help="Perform Distillation")
     parser.add_argument("--teacher", default="", type=str, help="Teacher Model Path")
+    parser.add_argument("--skip-teacher-eval", default=False, action='store_true', help="Skip Teacher Evaluation on Distillation")
     parser.add_argument("--temperature", default=2.0, type=float, help="Soft Label Temperature")
     parser.add_argument("--tboard-port", default=6006, type=int, help="TensorBoard Port Number")
     parser.add_argument("--self-distill", default=False, action='store_true', help="Training by Self-Distillation")
@@ -121,27 +122,41 @@ if __name__ == "__main__":
     train_gen = CifarGenerator(x_train, y_train.flatten(), augment=True, model_type=args.model, image_size=(args.img_w, args.img_h))
     test_gen = CifarGenerator(x_test, y_test.flatten(), augment=False, model_type=args.model, image_size=(args.img_w, args.img_h))
 
-    if args.distill and args.teacher != "":
-        teacher_model = tf.keras.models.load_model(args.teacher)
-        teacher_model.trainable=False
-        distillation_model = DistillationModel(teacher_model, n_model, temperature=args.temperature)
+    train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch * 2)
+    test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
 
-        test_set = CifarGenerator(x_test, y_test.flatten(), augment=False, model_type=args.model, image_size=(args.img_w, args.img_h)).get_tf_dataset(args.batch, shuffle=False)
+    print("="*50)
 
-        teacher_model.compile(loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-        distillation_model.evaluate_teacher(test_set=test_set)
+    if args.distill:
+        teacher_f_name = args.teacher.split("/")[-1]
 
-        print("Teacher Model Loss: {:.5f}, Accuracy: {:.5f}".format(distillation_model.teacher_loss, distillation_model.teacher_accuracy))
+        print(f"{'=' * 10}   Distillation   {'=' * 10}")
+        print(f"{'=' * 10}   Teacher: {teacher_f_name}   {'=' * 10}")
+        print(f"{'=' * 10}   Student: {args.model}   {'=' * 10}")
 
-        distillation_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr))
-        n_model = distillation_model.student_model
+        try:
+            teacher_model = tf.keras.models.load_model(args.teacher)
+        except:
+            print("Loading Teacher Model Failed at {}".format(args.teacher))
+            print("Please specify teacher model file path by --teacher model_path")
+            exit(0)
 
-        train_gen = DistillationGenerator(train_gen, train_gen.data.shape[0], teacher_model, from_teacher=True)
-        test_gen = DistillationGenerator(test_gen, test_gen.data.shape[0], teacher_model, from_teacher=True)
+        distiller = DistillationModel(teacher_model, n_model, temperature=args.temperature)
+
+        if not args.skip_teacher_eval:
+            distiller.evaluate_teacher(test_set=test_set)
+            print("Teacher Model Loss: {:.5f}, Accuracy: {:.5f}".format(distiller.teacher_loss, distiller.teacher_accuracy))
+
+        distiller.build_model()
+        distiller.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr))
+        n_model = distiller.distill_model
 
         save_metric = 'val_metric_accuracy'
-        tboard_path = "./export/distill_{}_to_{}_".format(args.teacher.split("/")[-1], args.model)
+        tboard_path = "./export/distill_{}_to_{}_".format(teacher_f_name, args.model)
     elif args.self_distill:
+        print(f"{'=' * 10}   Self-Distillation   {'=' * 10}")
+        print(f"{'=' * 10}   Target Model: {args.model}   {'=' * 10}")
+
         distill_param_dict = {
             tf.keras.applications.ResNet50: (['conv2_block3_out', 'conv3_block4_out', 'conv4_block6_out'], 2048, 'conv5_block3_out'),
             resnet.ResNet18: (['resblock_0_1_activation_1', 'resblock_1_1_activation_1', 'resblock_2_1_activation_1'], 512, 'resblock_3_1_activation_1')
@@ -155,17 +170,18 @@ if __name__ == "__main__":
         self_distiller = SelfDistillationModel(n_model, out_layer_names, final_n_filter, final_feat_layer_name)
         self_distiller.build_model()
         self_distiller.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr))
+
         n_model = self_distiller.distill_model
         save_metric = 'val_out_dense_metric_out_accuracy'
         tboard_path = "./export/self_distill_{}_".format(args.model)
     else:
+        print(f"{'=' * 10}   Base Model Training   {'=' * 10}")
+        print(f"{'=' * 10}   Target Model: {args.model}   {'=' * 10}")
+
         n_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
                         loss='sparse_categorical_crossentropy', metrics=['accuracy'])
         save_metric = 'val_accuracy'
         tboard_path = "./export/{}_".format(args.model)
-
-    train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch*2)
-    test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
 
     callbacks, tboard_root = get_tf_callbacks(tboard_path, tboard_callback=True,
                                               confuse_callback=False, test_dataset=test_set, save_metric=save_metric,

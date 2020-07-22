@@ -104,7 +104,7 @@ class SelfDistillationModel:
 
     def metric_out_accuracy(self, y_true, y_pred):
         if tf.shape(y_pred).shape == 2:
-            return tf.keras.metrics.sparse_categorical_accuracy(y_true, y_pred)
+            return tf.reduce_mean(tf.keras.metrics.sparse_categorical_accuracy(y_true, y_pred))
         else:
             return -1
 
@@ -122,7 +122,7 @@ class SelfDistillationModel:
         if tf.shape(y_pred).shape == 3:
             y_pred = tf.split(y_pred, self.n_out // 2, axis=-1)
 
-            logit_loss = tf.keras.metrics.sparse_categorical_accuracy(y_true, y_pred[i])
+            logit_loss = tf.reduce_mean(tf.keras.metrics.sparse_categorical_accuracy(y_true, y_pred[i]))
 
         return logit_loss
 
