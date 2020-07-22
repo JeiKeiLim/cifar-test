@@ -24,7 +24,7 @@ def compute_sparsity(model_, sparse_threshold=0.05):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("path", type=str, help="Saved model path")
     parser.add_argument("--lr", default=0.001, type=float, help="Learning Rate. (Default: 0.001)")
     parser.add_argument("--batch", default=8, type=int, help="Batch Size. (Default: 8)")

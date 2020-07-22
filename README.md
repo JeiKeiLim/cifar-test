@@ -25,6 +25,10 @@ python train_base_model_cifar.py --model resnet50 --weights ./export/saved_weigh
 python train_base_model_cifar.py --model resnet18 --distill --teacher ./export/saved_model.h5 --temperature 2.0 --dataset cifar10 --epochs 100 --unfreeze -1 --lr 0.001 --img_w 32 --img_h 32
 ```
 
+### 3. Self-Distillation
+```shell
+python train_base_model_cifar.py --model resnet18 --self-distill --temperature 2.0 --dataset cifar10 --epochs 100 --unfreeze -1 --lr 0.001 --img_w 32 --img_h 32
+```
 
 
 ## Usage
@@ -34,8 +38,13 @@ usage: train_base_model_cifar.py [-h] [--model MODEL] [--dataset DATASET]
                                  [--batch BATCH] [--epochs EPOCHS]
                                  [--weights WEIGHTS] [--summary]
                                  [--img_w IMG_W] [--img_h IMG_H] [--distill]
-                                 [--teacher TEACHER]
-                                 [--temperature TEMPERATURE]
+                                 [--teacher TEACHER] [--skip-teacher-eval]
+                                 [--temperature TEMPERATURE] [--self-distill]
+                                 [--no-tensorboard]
+                                 [--tboard-root TBOARD_ROOT]
+                                 [--tboard-host TBOARD_HOST]
+                                 [--tboard-port TBOARD_PORT]
+                                 [--tboard-profile TBOARD_PROFILE]
 optional arguments:
   -h, --help            show this help message and exit
   --model MODEL         Model Name. Supported Models: (vgg16, vgg19,
@@ -45,23 +54,36 @@ optional arguments:
                         resnet50v2, resnet152, resnet152v2, inceptionv3,
                         inceptionresnetv2, densenet121, densenet169,
                         densenet201, nasnetlarge, nasnetmobile, xception,
-                        resnet18, resnet10). (Default: resnet18)
+                        resnet18, resnet10). (default: resnet18)
   --dataset DATASET     Dataset Name. Supported Dataset: (cifar10, cifar100).
-                        (Default: cifar10)
+                        (default: cifar10)
   --unfreeze UNFREEZE   A number unfreeze layer. 0: Freeze all. -1: Unfreeze
-                        all. (Default: 0)
-  --lr LR               Learning Rate. (Default: 0.001)
-  --batch BATCH         Batch Size. (Default: 8)
-  --epochs EPOCHS       Epochs. (Default: 1000)
+                        all. (default: 0)
+  --lr LR               Learning Rate. (default: 0.001)
+  --batch BATCH         Batch Size. (default: 8)
+  --epochs EPOCHS       Epochs. (default: 1000)
   --weights WEIGHTS     Weight path to load. If not given, training begins
-                        from scratch with imagenet base weights
-  --summary             Display a summary of the model and exit
-  --img_w IMG_W         Image Width (Default: 224)
-  --img_h IMG_H         Image Height (Default: 224)
-  --distill             Perform Distillation
-  --teacher TEACHER     Teacher Model Path
+                        from scratch with imagenet base weights (default: )
+  --summary             Display a summary of the model and exit (default:
+                        False)
+  --img_w IMG_W         Image Width (default: 224)
+  --img_h IMG_H         Image Height (default: 224)
+  --distill             Perform Distillation (default: False)
+  --teacher TEACHER     Teacher Model Path (default: )
+  --skip-teacher-eval   Skip Teacher Evaluation on Distillation (default:
+                        False)
   --temperature TEMPERATURE
-                        Soft Label Temperature
+                        Soft Label Temperature (default: 2.0)
+  --self-distill        Training by Self-Distillation (default: False)
+  --no-tensorboard      Skip running tensorboard (default: False)
+  --tboard-root TBOARD_ROOT
+                        Tensorboard Log Root (default: ./export)
+  --tboard-host TBOARD_HOST
+                        Tensorboard Host Address (default: 0.0.0.0)
+  --tboard-port TBOARD_PORT
+                        TensorBoard Port Number (default: 6006)
+  --tboard-profile TBOARD_PROFILE
+                        Tensorboard Profiling (0: No Profile) (default: 0)
 
 ```
 

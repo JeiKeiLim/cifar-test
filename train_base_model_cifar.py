@@ -45,24 +45,28 @@ if __name__ == "__main__":
         "cifar100": tf.keras.datasets.cifar100,
     }
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="resnet18", type=str, help="Model Name. Supported Models: ({}). (Default: resnet18)".format(
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--model", default="resnet18", type=str, help="Model Name. Supported Models: ({}).".format(
         ", ".join(list(model_dict.keys()))))
-    parser.add_argument("--dataset", default="cifar10", type=str, help="Dataset Name. Supported Dataset: ({}). (Default: cifar10)".format(", ".join(list(dataset_dict.keys()))))
-    parser.add_argument("--unfreeze", default=0, type=int, help="A number unfreeze layer. 0: Freeze all. -1: Unfreeze all. (Default: 0)")
-    parser.add_argument("--lr", default=0.001, type=float, help="Learning Rate. (Default: 0.001)")
-    parser.add_argument("--batch", default=8, type=int, help="Batch Size. (Default: 8)")
-    parser.add_argument("--epochs", default=1000, type=int, help="Epochs. (Default: 1000)")
+    parser.add_argument("--dataset", default="cifar10", type=str, help="Dataset Name. Supported Dataset: ({}).".format(", ".join(list(dataset_dict.keys()))))
+    parser.add_argument("--unfreeze", default=0, type=int, help="A number unfreeze layer. 0: Freeze all. -1: Unfreeze all.")
+    parser.add_argument("--lr", default=0.001, type=float, help="Learning Rate.")
+    parser.add_argument("--batch", default=8, type=int, help="Batch Size.")
+    parser.add_argument("--epochs", default=1000, type=int, help="Epochs.")
     parser.add_argument("--weights", default="", type=str, help="Weight path to load. If not given, training begins from scratch with imagenet base weights")
     parser.add_argument("--summary", dest="summary", action="store_true", default=False, help="Display a summary of the model and exit")
-    parser.add_argument("--img_w", default=224, type=int, help="Image Width (Default: 224)")
-    parser.add_argument("--img_h", default=224, type=int, help="Image Height (Default: 224)")
+    parser.add_argument("--img_w", default=224, type=int, help="Image Width")
+    parser.add_argument("--img_h", default=224, type=int, help="Image Height")
     parser.add_argument("--distill", default=False, action='store_true', help="Perform Distillation")
     parser.add_argument("--teacher", default="", type=str, help="Teacher Model Path")
     parser.add_argument("--skip-teacher-eval", default=False, action='store_true', help="Skip Teacher Evaluation on Distillation")
     parser.add_argument("--temperature", default=2.0, type=float, help="Soft Label Temperature")
-    parser.add_argument("--tboard-port", default=6006, type=int, help="TensorBoard Port Number")
     parser.add_argument("--self-distill", default=False, action='store_true', help="Training by Self-Distillation")
+    parser.add_argument("--no-tensorboard", default=False, action='store_true', help="Skip running tensorboard")
+    parser.add_argument("--tboard-root", default="./export", type=str, help="Tensorboard Log Root")
+    parser.add_argument("--tboard-host", default="0.0.0.0", type=str, help="Tensorboard Host Address")
+    parser.add_argument("--tboard-port", default=6006, type=int, help="TensorBoard Port Number")
+    parser.add_argument("--tboard-profile", default=0, type=int, help="Tensorboard Profiling (0: No Profile)")
 
     args = parser.parse_args()
 
@@ -127,6 +131,8 @@ if __name__ == "__main__":
 
     print("="*50)
 
+    tboard_path = args.tboard_root
+
     if args.distill:
         teacher_f_name = args.teacher.split("/")[-1]
 
@@ -152,7 +158,7 @@ if __name__ == "__main__":
         n_model = distiller.distill_model
 
         save_metric = 'val_metric_accuracy'
-        tboard_path = "./export/distill_{}_to_{}_".format(teacher_f_name, args.model)
+        tboard_path += "/distill_{}_to_{}_".format(args.tboard_root, teacher_f_name, args.model)
     elif args.self_distill:
         print(f"{'=' * 10}   Self-Distillation   {'=' * 10}")
         print(f"{'=' * 10}   Target Model: {args.model}   {'=' * 10}")
@@ -171,13 +177,13 @@ if __name__ == "__main__":
             print(", ".join([support_models[i].__name__ for i in range(len(support_models))]))
 
         out_layer_names, final_n_filter, final_feat_layer_name = distill_param_dict[TargetModel]
-        self_distiller = SelfDistillationModel(n_model, out_layer_names, final_n_filter, final_feat_layer_name)
+        self_distiller = SelfDistillationModel(n_model, out_layer_names, final_n_filter, final_feat_layer_name, temperature=args.temperature)
         self_distiller.build_model()
         self_distiller.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr))
 
         n_model = self_distiller.distill_model
         save_metric = 'val_out_dense_metric_out_accuracy'
-        tboard_path = "./export/self_distill_{}_".format(args.model)
+        tboard_path += "/self_distill_{}_".format(args.model)
     else:
         print(f"{'=' * 10}   Base Model Training   {'=' * 10}")
         print(f"{'=' * 10}   Target Model: {args.model}   {'=' * 10}")
@@ -185,16 +191,21 @@ if __name__ == "__main__":
         n_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
                         loss='sparse_categorical_crossentropy', metrics=['accuracy'])
         save_metric = 'val_accuracy'
-        tboard_path = "./export/{}_".format(args.model)
+        tboard_path += "/{}_".format(args.model)
 
-    callbacks, tboard_root = get_tf_callbacks(tboard_path, tboard_callback=True,
+    tboard_callback = False if args.tboard_root == "" else True
+
+    callbacks, tboard_root = get_tf_callbacks(tboard_path, tboard_callback=tboard_callback, tboard_profile_batch=args.tboard_profile,
                                               confuse_callback=False, test_dataset=test_set, save_metric=save_metric,
                                               modelsaver_callback=True,
                                               earlystop_callback=False,
                                               sparsity_callback=True, sparsity_threshold=0.05)
 
-    run_tensorboard(tboard_root, port=args.tboard_port)
+    if not args.no_tensorboard:
+        run_tensorboard(tboard_root, host=args.tboard_host, port=args.tboard_port)
 
     n_model.fit(train_set, epochs=args.epochs, validation_data=test_set, callbacks=callbacks)
 
-    wait_ctrl_c()
+    if not args.no_tensorboard:
+        wait_ctrl_c()
+
