@@ -46,9 +46,31 @@ class SelfDistillationModel:
         distill_outs_feat = tf.keras.layers.Concatenate(name="out_feats")(distill_outs_feat)
         distill_outs_logit = tf.keras.layers.Concatenate(name="out_logits")(distill_outs_logit)
 
-        self.distill_model = tf.keras.models.Model(self.model.input, [model.output, distill_outs_feat, distill_outs_logit])
+        self.distill_model = tf.keras.models.Model(self.model.input, [self.model.output, distill_outs_feat, distill_outs_logit])
 
         return self.distill_model
+
+    def compile(self, **kwargs):
+        metrics = [
+            self.metric_out_accuracy,
+        ]
+        for i in range((self.n_out//2)-1):
+            p_func = partial(self.metric_feat_loss, i=i)
+            p_func.__name__ = f"feat_metric_{i}"
+            metrics.append(p_func)
+
+        for i in range(self.n_out//2):
+            p_func = partial(self.metric_logit_accuracy, i=i)
+            p_func.__name__ = f"logit_metric_{i}"
+            metrics.append(p_func)
+
+        losses = [self.loss_out, self.loss_feat, self.loss_logit]
+
+        kwargs['metrics'] = metrics
+        kwargs['loss'] = losses
+        kwargs['loss_weights'] = [1.0, self.feat_lambda, 1.0]
+
+        self.distill_model.compile(**kwargs)
 
     def loss_out(self, y_true, y_pred):
         out_loss = tf.reduce_mean(tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred))
@@ -79,14 +101,6 @@ class SelfDistillationModel:
             logit_loss += tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(soft_logit, logit_pred[i]))
 
         return logit_loss
-
-    def metrics(self, y_true, y_pred):
-        if tf.shape(y_pred).shape == 2:
-            return self.metric_out_accuracy(y_true, y_pred)
-        elif tf.shape(y_pred).shape == 5:
-            return self.metric_feat_loss(y_true, y_pred)
-        elif tf.shape(y_pred).shape == 3:
-            return self.metric_logit_accuracy(y_true, y_pred)
 
     def metric_out_accuracy(self, y_true, y_pred):
         if tf.shape(y_pred).shape == 2:
@@ -123,23 +137,10 @@ if __name__ == "__main__":
     model = ResNet18(input_shape=(32, 32, 3), n_classes=10, include_top=True).build_model()
 
     self_distiller = SelfDistillationModel(model, out_layer_names , final_n_filter, final_feat_layer_name, temperature=2.0)
-    distill_model = self_distiller.build_model()
-
-    metrics = [
-        self_distiller.metric_out_accuracy,
-    ]
-    for i in range(3):
-        p_func = partial(self_distiller.metric_feat_loss, i=i)
-        p_func.__name__ = f"feat_metric_{i}"
-        metrics.append(p_func)
-    for i in range(3):
-        p_func = partial(self_distiller.metric_logit_accuracy, i=i)
-        p_func.__name__ = f"logit_metric_{i}"
-        metrics.append(p_func)
-
-    distill_model.compile(optimizer='adam', loss=[self_distiller.loss_out, self_distiller.loss_feat, self_distiller.loss_logit],
-                          loss_weights=[1.0, 0.001, 1.0], metrics=metrics)
+    self_distiller.build_model()
+    self_distiller.compile(optimizer='adam')
+    distill_model = self_distiller.distill_model
 
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
-    distill_model.fit(x_train, y_train, epochs=1)
+    distill_model.fit(x_train, y_train, epochs=1, validation_data=(x_test, y_test))
 

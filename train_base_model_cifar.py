@@ -4,7 +4,7 @@ import efficientnet.tfkeras as efn
 import argparse
 from tfhelper.tensorboard import get_tf_callbacks, run_tensorboard, wait_ctrl_c
 from tfhelper.gpu import allow_gpu_memory_growth
-from models import resnet, DistillationModel, DistillationGenerator
+from models import resnet, DistillationModel, DistillationGenerator, SelfDistillationModel
 
 
 if __name__ == "__main__":
@@ -61,6 +61,7 @@ if __name__ == "__main__":
     parser.add_argument("--teacher", default="", type=str, help="Teacher Model Path")
     parser.add_argument("--temperature", default=2.0, type=float, help="Soft Label Temperature")
     parser.add_argument("--tboard-port", default=6006, type=int, help="TensorBoard Port Number")
+    parser.add_argument("--self-distill", default=False, action='store_true', help="Training by Self-Distillation")
 
     args = parser.parse_args()
 
@@ -102,10 +103,10 @@ if __name__ == "__main__":
 
     conv2d = tf.keras.layers.Conv2D(y_train.max()+1, 1, padding='SAME', activation=None)(model.output)
     conv2d = tf.keras.layers.BatchNormalization()(conv2d)
-    conv2d = tf.keras.layers.ReLU()(conv2d)
+    conv2d = tf.keras.layers.ReLU(name="final_block_activation")(conv2d)
 
     output = tf.keras.layers.GlobalAveragePooling2D()(conv2d)
-    output = tf.keras.layers.Softmax()(output)
+    output = tf.keras.layers.Softmax(name="out_dense")(output)
 
     n_model = tf.keras.models.Model(model.input, output)
 
@@ -139,12 +140,29 @@ if __name__ == "__main__":
         test_gen = DistillationGenerator(test_gen, test_gen.data.shape[0], teacher_model, from_teacher=True)
 
         save_metric = 'val_metric_accuracy'
-        tboard_path = "./export/{}_distill".format(args.model)
+        tboard_path = "./export/distill_{}_to_{}_".format(args.teacher.split("/")[-1], args.model)
+    elif args.self_distill:
+        distill_param_dict = {
+            tf.keras.applications.ResNet50: (['conv2_block3_out', 'conv3_block4_out', 'conv4_block6_out'], 2048, 'conv5_block3_out'),
+            resnet.ResNet18: (['resblock_0_1_activation_1', 'resblock_1_1_activation_1', 'resblock_2_1_activation_1'], 512, 'resblock_3_1_activation_1')
+        }
+        if TargetModel not in distill_param_dict.keys():
+            print("Current Supported Models")
+            support_models = list(distill_param_dict.keys())
+            print(", ".join([support_models[i].__name__ for i in range(len(support_models))]))
+
+        out_layer_names, final_n_filter, final_feat_layer_name = distill_param_dict[TargetModel]
+        self_distiller = SelfDistillationModel(n_model, out_layer_names, final_n_filter, final_feat_layer_name)
+        self_distiller.build_model()
+        self_distiller.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr))
+        n_model = self_distiller.distill_model
+        save_metric = 'val_out_dense_metric_out_accuracy'
+        tboard_path = "./export/self_distill_{}_".format(args.model)
     else:
         n_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
                         loss='sparse_categorical_crossentropy', metrics=['accuracy'])
         save_metric = 'val_accuracy'
-        tboard_path = "./export/{}".format(args.model)
+        tboard_path = "./export/{}_".format(args.model)
 
     train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch*2)
     test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
