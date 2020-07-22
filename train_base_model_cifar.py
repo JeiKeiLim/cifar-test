@@ -63,10 +63,12 @@ if __name__ == "__main__":
     parser.add_argument("--temperature", default=2.0, type=float, help="Soft Label Temperature")
     parser.add_argument("--self-distill", default=False, action='store_true', help="Training by Self-Distillation")
     parser.add_argument("--no-tensorboard", default=False, action='store_true', help="Skip running tensorboard")
-    parser.add_argument("--tboard-root", default="./export", type=str, help="Tensorboard Log Root")
+    parser.add_argument("--no-tensorboard-writing", default=False, action='store_true', help="Skip writing tensorboard")
+    parser.add_argument("--tboard-root", default="./export", type=str, help="Tensorboard Log Root. Set this to 'no' will disable writing tensorboards")
     parser.add_argument("--tboard-host", default="0.0.0.0", type=str, help="Tensorboard Host Address")
     parser.add_argument("--tboard-port", default=6006, type=int, help="TensorBoard Port Number")
     parser.add_argument("--tboard-profile", default=0, type=int, help="Tensorboard Profiling (0: No Profile)")
+    parser.add_argument("--debug", default=False, action='store_true', help="Debugging Mode")
 
     args = parser.parse_args()
 
@@ -147,7 +149,7 @@ if __name__ == "__main__":
             print("Please specify teacher model file path by --teacher model_path")
             exit(0)
 
-        distiller = DistillationModel(teacher_model, n_model, temperature=args.temperature)
+        distiller = DistillationModel(teacher_model, n_model, temperature=args.temperature, debug=args.debug)
 
         if not args.skip_teacher_eval:
             distiller.evaluate_teacher(test_set=test_set)
@@ -193,7 +195,7 @@ if __name__ == "__main__":
         save_metric = 'val_accuracy'
         tboard_path += "/{}_".format(args.model)
 
-    tboard_callback = False if args.tboard_root == "" else True
+    tboard_callback = False if args.no_tensorboard_writing else True
 
     callbacks, tboard_root = get_tf_callbacks(tboard_path, tboard_callback=tboard_callback, tboard_profile_batch=args.tboard_profile,
                                               confuse_callback=False, test_dataset=test_set, save_metric=save_metric,

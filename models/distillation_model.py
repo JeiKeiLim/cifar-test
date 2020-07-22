@@ -3,7 +3,7 @@ from functools import partial
 
 
 class DistillationModel:
-    def __init__(self, teacher_model, student_model, temperature=2.0):
+    def __init__(self, teacher_model, student_model, teacher_logit_layer=-2, temperature=2.0, debug=False):
         self.input_shape = tuple(teacher_model.input.shape[1:])
         self.n_classes = teacher_model.output.shape[1]
 
@@ -13,11 +13,16 @@ class DistillationModel:
         self.teacher_loss = None
         self.teacher_accuracy = None
         self.distill_model = None
+        self.teacher_logit_layer = teacher_logit_layer
+        self.debug = debug
 
     def build_model(self):
         self.teacher_model.trainable = False
+        teacher_out = self.teacher_model.layers[self.teacher_logit_layer].output if type(self.teacher_logit_layer) == int else self.teacher_model.get_layer(self.teacher_logit_layer).output
+        teacher_model = tf.keras.models.Model(self.teacher_model.input, teacher_out)
+
         model_out = tf.keras.layers.Concatenate(name="distill_out")([tf.expand_dims(self.student_model.output, axis=-1),
-                                                   tf.expand_dims(self.teacher_model(self.student_model.input), axis=-1)])
+                                                   tf.expand_dims(teacher_model(self.student_model.input), axis=-1)])
         self.distill_model = tf.keras.models.Model(self.student_model.input, [self.student_model.output, model_out])
 
         return self.distill_model
@@ -56,6 +61,33 @@ class DistillationModel:
 
         soft_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(soft_label, student_pred))
 
+        if self.debug:
+            hard_label = tf.nn.softmax(teacher_pred)
+
+            tf.print("")
+            tf.print("Teacher Pred: (", end='')
+            for i in range(10):
+                tf.print(teacher_pred[0][i], ",", end="")
+            tf.print(")")
+
+            tf.print("")
+            tf.print("Teacher hard_label: (", end='')
+            for i in range(10):
+                tf.print(hard_label[0][i], ",", end="")
+            tf.print(")")
+
+            tf.print("Teacher soft_label: (", end='')
+            for i in range(10):
+                tf.print(soft_label[0][i], ",", end="")
+            tf.print(")")
+
+            tf.print("Teacher student_pred: (", end='')
+            for i in range(10):
+                tf.print(student_pred[0][i], ",", end="")
+            tf.print(")")
+
+            tf.print("Soft Loss:", soft_loss)
+
         return soft_loss * tf.square(self.temperature)
 
     def metric_accuracy(self, y_true, y_pred, student=True):
@@ -67,7 +99,7 @@ class DistillationModel:
             teacher_pred = tf.reshape(teacher_pred, tf.shape(teacher_pred)[:-1])
             student_pred = tf.reshape(student_pred, tf.shape(student_pred)[:-1])
 
-            y_pred = student_pred if student else teacher_pred
+            y_pred = student_pred if student else tf.nn.softmax(teacher_pred)
 
             accuracy = tf.reduce_mean(tf.keras.metrics.sparse_categorical_accuracy(y_true, y_pred))
 

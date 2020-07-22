@@ -5,17 +5,19 @@ from functools import partial
 
 
 class SelfDistillationModel:
-    def __init__(self, target_model, out_layer_names, final_n_filter, final_feat_layer_name, out_layer_strides=[8, 4, 2], temperature=2.0, feat_lambda=0.001):
+    def __init__(self, target_model, out_layer_names, final_n_filter, final_feat_layer_name, model_logit_layer=-2, out_layer_strides=[8, 4, 2], temperature=2.0, feat_lambda=0.001, debug=False):
         self.model = target_model
         self.temperature = temperature
         self.final_n_filter = final_n_filter
         self.out_layer_names = out_layer_names
         self.out_layer_strides = out_layer_strides
         self.final_feat_layer_name = final_feat_layer_name
+        self.model_logit_layer = model_logit_layer
         self.n_class = self.model.output.shape[1]
         self.feat_lambda = feat_lambda
         self.n_out = (len(out_layer_names)+1) * 2
         self.distill_model = None
+        self.debug = debug
 
     def build_model(self):
         distill_outs_feat = []
@@ -37,7 +39,9 @@ class SelfDistillationModel:
 
             distill_outs_logit.append(distill_out)
 
-        distill_outs_logit.append(self.model.output)
+        model_out = self.model.layers[self.model_logit_layer].output if type(self.model_logit_layer) == int else self.model.get_layer(self.model_logit_layer).output
+
+        distill_outs_logit.append(model_out)
 
         for i in range(len(distill_outs_feat)):
             distill_outs_feat[i] = tf.expand_dims(distill_outs_feat[i], axis=-1)
@@ -124,6 +128,9 @@ class SelfDistillationModel:
         if tf.shape(y_pred).shape == 3:
             y_pred = tf.split(y_pred, self.n_out // 2, axis=-1)
             y_pred = tf.reshape(y_pred[i], tf.shape(y_pred[i])[:-1])
+
+            if i == ((self.n_out//2)-1):
+                y_pred = tf.nn.softmax(y_pred)
 
             logit_loss = tf.reduce_mean(tf.keras.metrics.sparse_categorical_accuracy(y_true, y_pred))
 
