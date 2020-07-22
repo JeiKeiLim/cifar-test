@@ -159,7 +159,11 @@ if __name__ == "__main__":
 
         distill_param_dict = {
             tf.keras.applications.ResNet50: (['conv2_block3_out', 'conv3_block4_out', 'conv4_block6_out'], 2048, 'conv5_block3_out'),
-            resnet.ResNet18: (['resblock_0_1_activation_1', 'resblock_1_1_activation_1', 'resblock_2_1_activation_1'], 512, 'resblock_3_1_activation_1')
+            tf.keras.applications.ResNet50V2: (['conv2_block3_1_relu', 'conv3_block4_1_relu', 'conv4_block6_1_relu'], 2048, 'post_relu'),
+            tf.keras.applications.MobileNet: (['conv_pw_3_relu', 'conv_pw_5_relu', 'conv_pw_11_relu'], 1024, 'conv_pw_13_relu'),
+            tf.keras.applications.MobileNetV2: (['block_3_expand_relu', 'block_6_expand_relu', 'block_13_expand_relu'], 1280, 'out_relu'),
+            resnet.ResNet18: (['resblock_0_1_activation_1', 'resblock_1_1_activation_1', 'resblock_2_1_activation_1'], 512, 'resblock_3_1_activation_1'),
+            resnet.ResNet10: (['resblock_0_0_activation_1', 'resblock_1_0_activation_1', 'resblock_2_0_activation_1'], 512, 'resblock_3_0_activation_1')
         }
         if TargetModel not in distill_param_dict.keys():
             print("Current Supported Models")
