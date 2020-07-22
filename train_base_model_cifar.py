@@ -151,6 +151,8 @@ if __name__ == "__main__":
 
         distiller = DistillationModel(teacher_model, n_model, temperature=args.temperature, debug=args.debug)
 
+        out_name = n_model.output.name.split("/")[0]
+
         if not args.skip_teacher_eval:
             distiller.evaluate_teacher(test_set=test_set)
             print("Teacher Model Loss: {:.5f}, Accuracy: {:.5f}".format(distiller.teacher_loss, distiller.teacher_accuracy))
@@ -159,7 +161,7 @@ if __name__ == "__main__":
         distiller.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr))
         n_model = distiller.distill_model
 
-        save_metric = 'val_metric_accuracy'
+        save_metric = f"val_{out_name}_accuracy_student"
         tboard_path += "/distill_{}_to_{}_".format(args.tboard_root, teacher_f_name, args.model)
     elif args.self_distill:
         print(f"{'=' * 10}   Self-Distillation   {'=' * 10}")
@@ -183,8 +185,10 @@ if __name__ == "__main__":
         self_distiller.build_model()
         self_distiller.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr))
 
+        out_name = n_model.output.name.split("/")[0]
+
         n_model = self_distiller.distill_model
-        save_metric = 'val_out_dense_metric_out_accuracy'
+        save_metric = f"val_{out_name}_metric_out_accuracy"
         tboard_path += "/self_distill_{}_".format(args.model)
     else:
         print(f"{'=' * 10}   Base Model Training   {'=' * 10}")
