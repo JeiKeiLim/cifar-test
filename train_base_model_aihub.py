@@ -92,7 +92,7 @@ if __name__ == "__main__":
 
     allow_gpu_memory_growth()
 
-    model = TargetModel(input_shape=(args.img_w, args.img_h, 3), include_top=False, weights='imagenet')
+    model = TargetModel(input_shape=(args.img_h, args.img_w, 3), include_top=False, weights='imagenet')
     if type(model) != tf.keras.models.Model:
         model = model.build_model()
         args.unfreeze = len(model.layers) if args.unfreeze == 0 else args.unfreeze
