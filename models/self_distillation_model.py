@@ -113,7 +113,9 @@ class SelfDistillationModel:
         if tf.shape(y_pred).shape == 5:
             y_pred = tf.split(y_pred, self.n_out // 2, axis=-1)
             feat_true, feat_pred = y_pred[-1], y_pred[:-1]
-            feat_loss = tf.reduce_mean(tf.keras.losses.mean_squared_error(feat_true, feat_pred[i]))
+            feat_true = tf.reshape(feat_true, tf.shape(feat_true)[:-1])
+            feat_pred = tf.reshape(feat_pred[i], tf.shape(feat_pred[i])[:-1])
+            feat_loss = tf.reduce_mean(tf.keras.losses.mean_squared_error(feat_true, feat_pred))
 
         return feat_loss
 
@@ -121,6 +123,7 @@ class SelfDistillationModel:
         logit_loss = -1
         if tf.shape(y_pred).shape == 3:
             y_pred = tf.split(y_pred, self.n_out // 2, axis=-1)
+            y_pred = tf.reshape(y_pred[i], tf.shape(y_pred[i])[:-1])
 
             logit_loss = tf.reduce_mean(tf.keras.metrics.sparse_categorical_accuracy(y_true, y_pred[i]))
 
