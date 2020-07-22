@@ -162,7 +162,7 @@ if __name__ == "__main__":
         n_model = distiller.distill_model
 
         save_metric = f"val_{out_name}_accuracy_student"
-        tboard_path += "/distill_{}_to_{}_".format(args.tboard_root, teacher_f_name, args.model)
+        tboard_path += "/distill_{}_to_{}_".format(teacher_f_name, args.model)
     elif args.self_distill:
         print(f"{'=' * 10}   Self-Distillation   {'=' * 10}")
         print(f"{'=' * 10}   Target Model: {args.model}   {'=' * 10}")
