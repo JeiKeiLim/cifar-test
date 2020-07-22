@@ -125,7 +125,7 @@ class SelfDistillationModel:
             y_pred = tf.split(y_pred, self.n_out // 2, axis=-1)
             y_pred = tf.reshape(y_pred[i], tf.shape(y_pred[i])[:-1])
 
-            logit_loss = tf.reduce_mean(tf.keras.metrics.sparse_categorical_accuracy(y_true, y_pred[i]))
+            logit_loss = tf.reduce_mean(tf.keras.metrics.sparse_categorical_accuracy(y_true, y_pred))
 
         return logit_loss
 
