@@ -1,3 +1,4 @@
+import sys
 import tensorflow as tf
 from cifar_generator import CifarGenerator
 import efficientnet.tfkeras as efn
@@ -5,9 +6,6 @@ import argparse
 from tfhelper.tensorboard import get_tf_callbacks, run_tensorboard, wait_ctrl_c
 from tfhelper.gpu import allow_gpu_memory_growth
 from models import resnet, DistillationModel, SelfDistillationModel
-from dataset import KProductsDataset
-from dataset.tfkeras import KProductsTFGenerator
-from dataset.tfkeras import preprocessing
 
 
 if __name__ == "__main__":
@@ -46,6 +44,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--dataset-conf", default="./conf/dataset_conf.json", help="Dataset Configuration Path")
+    parser.add_argument("--dataset-lib", default="../aihub_dataset", help="Dataset Library Path")
     parser.add_argument("--model", default="resnet18", type=str, help="Model Name. Supported Models: ({}).".format(
         ", ".join(list(model_dict.keys()))))
     parser.add_argument("--unfreeze", default=0, type=int, help="A number unfreeze layer. 0: Freeze all. -1: Unfreeze all.")
@@ -70,6 +69,12 @@ if __name__ == "__main__":
     parser.add_argument("--debug", default=False, action='store_true', help="Debugging Mode")
 
     args = parser.parse_args()
+
+    sys.path.extend([args.dataset_lib])
+
+    from dataset import KProductsDataset
+    from dataset.tfkeras import KProductsTFGenerator
+    from dataset.tfkeras import preprocessing
 
     dataset = KProductsDataset(args.dataset_conf)
 
