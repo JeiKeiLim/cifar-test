@@ -5,6 +5,9 @@ import argparse
 from tfhelper.tensorboard import get_tf_callbacks, run_tensorboard, wait_ctrl_c
 from tfhelper.gpu import allow_gpu_memory_growth
 from models import resnet, DistillationModel, SelfDistillationModel
+from dataset import KProductsDataset
+from dataset.tfkeras import KProductsTFGenerator
+from dataset.tfkeras import preprocessing
 
 
 if __name__ == "__main__":
@@ -40,15 +43,11 @@ if __name__ == "__main__":
         "resnet18": resnet.ResNet18,
         "resnet10": resnet.ResNet10
     }
-    dataset_dict = {
-        "cifar10": tf.keras.datasets.cifar10,
-        "cifar100": tf.keras.datasets.cifar100,
-    }
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--dataset-conf", default="./conf/dataset_conf.json", help="Dataset Configuration Path")
     parser.add_argument("--model", default="resnet18", type=str, help="Model Name. Supported Models: ({}).".format(
         ", ".join(list(model_dict.keys()))))
-    parser.add_argument("--dataset", default="cifar10", type=str, help="Dataset Name. Supported Dataset: ({}).".format(", ".join(list(dataset_dict.keys()))))
     parser.add_argument("--unfreeze", default=0, type=int, help="A number unfreeze layer. 0: Freeze all. -1: Unfreeze all.")
     parser.add_argument("--lr", default=0.001, type=float, help="Learning Rate.")
     parser.add_argument("--batch", default=8, type=int, help="Batch Size.")
@@ -72,13 +71,13 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.dataset in dataset_dict.keys():
-        (x_train, y_train), (x_test, y_test) = dataset_dict[args.dataset].load_data()
-    else:
-        print("Supported Dataset List")
-        for i, dataset_name in enumerate(dataset_dict.keys()):
-            print("{:02d}: {}".format(i+1, dataset_name))
-        exit(0)
+    dataset = KProductsDataset(args.dataset_conf)
+
+    annotations = dataset.annotations.sample(n=dataset.annotations.shape[0]).reset_index(drop=True)
+    n_train = int(annotations.shape[0] * 0.7)
+
+    train_annotation = annotations.iloc[:n_train]
+    test_annotation = annotations.iloc[n_train:]
 
     TargetModel = None
 
@@ -108,7 +107,7 @@ if __name__ == "__main__":
         for i in range(0, len(model.layers)-args.unfreeze):
             model.layers[i].trainable = False
 
-    conv2d = tf.keras.layers.Conv2D(y_train.max()+1, 1, padding='SAME', activation=None)(model.output)
+    conv2d = tf.keras.layers.Conv2D(dataset.n_classes, 1, padding='SAME', activation=None)(model.output)
     conv2d = tf.keras.layers.BatchNormalization()(conv2d)
     conv2d = tf.keras.layers.ReLU(name="final_block_activation")(conv2d)
 
@@ -125,8 +124,16 @@ if __name__ == "__main__":
     if args.summary:
         exit(0)
 
-    train_gen = CifarGenerator(x_train, y_train.flatten(), augment=True, model_type=args.model, image_size=(args.img_w, args.img_h))
-    test_gen = CifarGenerator(x_test, y_test.flatten(), augment=False, model_type=args.model, image_size=(args.img_w, args.img_h))
+    train_gen = KProductsTFGenerator(train_annotation, dataset.config['label_dict'], dataset.config['dataset_root'],
+                                     shuffle=True, image_size=(args.img_h, args.img_w),
+                                     augment_func=None,
+                                     preprocess_func=preprocessing.get_preprocess_by_model_name(args.model))
+    test_gen = KProductsTFGenerator(test_annotation, dataset.config['label_dict'], dataset.config['dataset_root'],
+                                     shuffle=False, image_size=(args.img_h, args.img_w),
+                                     preprocess_func=preprocessing.get_preprocess_by_model_name(args.model))
+
+    # train_gen = CifarGenerator(x_train, y_train.flatten(), augment=True, model_type=args.model, image_size=(args.img_w, args.img_h))
+    # test_gen = CifarGenerator(x_test, y_test.flatten(), augment=False, model_type=args.model, image_size=(args.img_w, args.img_h))
 
     train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch * 2)
     test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)

@@ -1,0 +1,5 @@
+{
+  "dataset_root": "/Users/jeikei/Documents/datasets/aihub_kproducts_resized_320",
+  "annotation_path": "/Users/jeikei/Dropbox/사업자료/2020/2020_0515_인공지능_그랜드_챌린지/Projects/aihub_dataset_process/converted_annotation.csv",
+  "class_key": "소분류"
+}
