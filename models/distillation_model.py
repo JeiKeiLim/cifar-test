@@ -62,10 +62,13 @@ class DistillationModel:
         accuracy = -1
         if student and tf.shape(y_pred).shape == 2:
             accuracy = tf.reduce_mean(tf.keras.metrics.sparse_categorical_accuracy(y_true, y_pred))
-        elif not student and tf.shape(y_pred).shape == 3:
+        elif tf.shape(y_pred).shape == 3:
             student_pred, teacher_pred = tf.split(y_pred, num_or_size_splits=2, axis=-1)
             teacher_pred = tf.reshape(teacher_pred, tf.shape(teacher_pred)[:-1])
+            student_pred = tf.reshape(student_pred, tf.shape(student_pred)[:-1])
 
-            accuracy = tf.reduce_mean(tf.keras.metrics.sparse_categorical_accuracy(y_true, teacher_pred))
+            y_pred = student_pred if student else teacher_pred
+
+            accuracy = tf.reduce_mean(tf.keras.metrics.sparse_categorical_accuracy(y_true, y_pred))
 
         return accuracy
