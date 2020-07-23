@@ -157,9 +157,6 @@ if __name__ == "__main__":
     else:
         n_model = model
 
-    if args.weights != "":
-        n_model.load_weights(args.weights)
-
     n_model.summary()
 
     if args.summary:
@@ -246,6 +243,9 @@ if __name__ == "__main__":
                         loss='sparse_categorical_crossentropy', metrics=['accuracy'])
         save_metric = 'val_accuracy'
         tboard_path += "/{}_".format(args.model)
+
+    if args.weights != "":
+        n_model.load_weights(args.weights)
 
     tboard_callback = False if args.no_tensorboard_writing else True
 
