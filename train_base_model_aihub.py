@@ -144,6 +144,7 @@ if __name__ == "__main__":
     print("="*50)
 
     tboard_path = args.tboard_root
+    model_out_idx = -1
 
     if args.distill:
         teacher_f_name = args.teacher.split("/")[-1]
@@ -171,6 +172,7 @@ if __name__ == "__main__":
         distiller.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr))
         n_model = distiller.distill_model
 
+        model_out_idx = 0
         save_metric = f"val_{out_name}_accuracy_student"
         tboard_path += "/distill_{}_to_{}_".format(teacher_f_name, args.model)
     elif args.self_distill:
@@ -197,6 +199,7 @@ if __name__ == "__main__":
 
         out_name = n_model.output.name.split("/")[0]
 
+        model_out_idx = 0
         n_model = self_distiller.distill_model
         save_metric = f"val_{out_name}_metric_out_accuracy"
         tboard_path += "/self_distill_{}_".format(args.model)
@@ -212,7 +215,7 @@ if __name__ == "__main__":
     tboard_callback = False if args.no_tensorboard_writing else True
 
     callbacks, tboard_root = get_tf_callbacks(tboard_path, tboard_callback=tboard_callback, tboard_profile_batch=args.tboard_profile,
-                                              confuse_callback=True, test_dataset=test_set, save_metric=save_metric,
+                                              confuse_callback=True, test_dataset=test_set, save_metric=save_metric, model_out_idx=model_out_idx,
                                               label_info=list(dataset_config['label_dict'].values()),
                                               modelsaver_callback=True,
                                               earlystop_callback=False,
