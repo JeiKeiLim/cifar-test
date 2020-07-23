@@ -1,6 +1,5 @@
 import sys
 import tensorflow as tf
-from cifar_generator import CifarGenerator
 import efficientnet.tfkeras as efn
 import argparse
 from tfhelper.tensorboard import get_tf_callbacks, run_tensorboard, wait_ctrl_c
@@ -57,6 +56,7 @@ if __name__ == "__main__":
     parser.add_argument("--summary", dest="summary", action="store_true", default=False, help="Display a summary of the model and exit")
     parser.add_argument("--img_w", default=224, type=int, help="Image Width")
     parser.add_argument("--img_h", default=224, type=int, help="Image Height")
+    parser.add_argument("--resnet-init-channel", default=64, type=int, help="ResNet Initial Channel Number")
     parser.add_argument("--distill", default=False, action='store_true', help="Perform Distillation")
     parser.add_argument("--teacher", default="", type=str, help="Teacher Model Path")
     parser.add_argument("--skip-teacher-eval", default=False, action='store_true', help="Skip Teacher Evaluation on Distillation")
@@ -69,6 +69,8 @@ if __name__ == "__main__":
     parser.add_argument("--tboard-port", default=6006, type=int, help="TensorBoard Port Number")
     parser.add_argument("--tboard-profile", default=0, type=int, help="Tensorboard Profiling (0: No Profile)")
     parser.add_argument("--debug", default=False, action='store_true', help="Debugging Mode")
+    parser.add_argument("--float16", default=False, action='store_true', help="Use Mixed Precision with float16")
+    parser.add_argument("--float16-dtype", default='mixed_float16', type=str, help="Mixed float16 precision type.")
 
     args = parser.parse_args()
 
@@ -98,11 +100,24 @@ if __name__ == "__main__":
 
     allow_gpu_memory_growth()
 
-    model = TargetModel(input_shape=(args.img_h, args.img_w, 3), include_top=False, weights='imagenet')
+    kwargs = {'input_shape': (args.img_h, args.img_w, 3), 'include_top':False, 'weights': 'imagenet'}
+    try:
+        if issubclass(TargetModel, resnet.ResNet):
+            kwargs['float16'] = args.float16
+            kwargs['float16_dtype'] = args.float16_dtype
+            kwargs['init_channel'] = args.resnet_init_channel
+    except:
+        pass
+
+    model = TargetModel(**kwargs)
+
     if type(model) != tf.keras.models.Model:
+        dtype = model.dtype
         model = model.build_model()
         args.unfreeze = len(model.layers) if args.unfreeze == 0 else args.unfreeze
         args.model = args.model + "_custom"
+    else:
+        dtype = tf.float32
 
     if args.unfreeze == 0:
         model.trainable = False
@@ -113,11 +128,11 @@ if __name__ == "__main__":
         for i in range(0, len(model.layers)-args.unfreeze):
             model.layers[i].trainable = False
 
-    conv2d = tf.keras.layers.Conv2D(n_classes, 1, padding='SAME', activation=None)(model.output)
-    conv2d = tf.keras.layers.BatchNormalization()(conv2d)
-    conv2d = tf.keras.layers.ReLU(name="final_block_activation")(conv2d)
+    conv2d = tf.keras.layers.Conv2D(n_classes, 1, padding='SAME', activation=None, dtype=dtype)(model.output)
+    conv2d = tf.keras.layers.BatchNormalization(dtype=dtype)(conv2d)
+    conv2d = tf.keras.layers.ReLU(name="final_block_activation", dtype=dtype)(conv2d)
 
-    output = tf.keras.layers.GlobalAveragePooling2D()(conv2d)
+    output = tf.keras.layers.GlobalAveragePooling2D(dtype=dtype)(conv2d)
     output = tf.keras.layers.Softmax(name="out_dense")(output)
 
     n_model = tf.keras.models.Model(model.input, output)

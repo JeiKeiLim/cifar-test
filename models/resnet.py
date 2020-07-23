@@ -3,7 +3,6 @@ from models import ConvBN, ResNetBlock, BottleNeckBlock
 
 
 class ResNet:
-    init_channel = 64
     layer_components = {
         10: [1, 1, 1, 1], #Custom ResNet
         18: [2, 2, 2, 2],
@@ -13,7 +12,7 @@ class ResNet:
         152: [3, 8, 36, 3]
     }
 
-    def __init__(self, input_shape=(None, None, 3), n_classes=0, n_layer=18):
+    def __init__(self, input_shape=(None, None, 3), init_channel=64, n_classes=0, n_layer=18, float16=False, float16_dtype='mixed_float16'):
         """
 
         :param input_shape: (tuple) (h, w, c)
@@ -25,22 +24,25 @@ class ResNet:
         self.n_classes = n_classes
         self.n_layer = n_layer
         self.layer_component = ResNet.layer_components[self.n_layer]
+        self.dtype = tf.keras.mixed_precision.experimental.Policy(float16_dtype) if float16 else tf.float32
+        self.init_channel = init_channel
 
     def get_layer(self, input_layer):
         ResBlock = ResNetBlock if self.n_layer < 50 else BottleNeckBlock
 
-        layer = ConvBN(ResNet.init_channel, (7, 7), strides=(2, 2), name="stem")(input_layer)
-        layer = tf.keras.layers.MaxPool2D((3, 3), strides=(2, 2), padding='SAME', name="max_pool")(layer)
+        layer = ConvBN(self.init_channel, (7, 7), strides=(2, 2), dtype=self.dtype, name="stem")(input_layer)
+        layer = tf.keras.layers.MaxPool2D((3, 3), strides=(2, 2), dtype=self.dtype, padding='SAME', name="max_pool")(layer)
 
         for i, n_layer in enumerate(self.layer_component):
-            channel = ResNet.init_channel * (2**i)
+            channel = self.init_channel * (2**i)
 
             for j in range(n_layer):
                 downsample = True if (i > 0 and j == 0) else False
-                layer = ResBlock(channel, (3, 3), downsample=downsample, name=f"resblock_{i}_{j}")(layer)
+                layer = ResBlock(channel, (3, 3), downsample=downsample, dtype=self.dtype,
+                                 name=f"resblock_{i}_{j}")(layer)
 
         if self.n_classes > 0:
-            layer = tf.keras.layers.GlobalAveragePooling2D(name="global_avg_pool")(layer)
+            layer = tf.keras.layers.GlobalAveragePooling2D(name="global_avg_pool", dtype=self.dtype,)(layer)
             layer = tf.keras.layers.Dense(self.n_classes, activation='softmax', use_bias=True, name="out_dense")(layer)
 
         return layer
@@ -57,16 +59,18 @@ class ResNet:
 
 
 class ResNet18(ResNet):
-    def __init__(self, input_shape=(None, None, 3), n_classes=0, include_top=False, weights=None):
-        ResNet.__init__(self, input_shape=input_shape, n_classes=n_classes, n_layer=18)
-        self.n_classes = 0 if include_top is False else n_classes
+    def __init__(self, n_classes=0, include_top=False, weights=None, **kwargs):
+        kwargs['n_layer'] = 18
+        kwargs['n_classes'] = 0 if include_top is False else n_classes
+        ResNet.__init__(self, **kwargs)
         self.weights = weights
 
 
 class ResNet10(ResNet):
-    def __init__(self, input_shape=(None, None, 3), n_classes=0, include_top=False, weights=None):
-        ResNet.__init__(self, input_shape=input_shape, n_classes=n_classes, n_layer=10)
-        self.n_classes = 0 if include_top is False else n_classes
+    def __init__(self, n_classes=0, include_top=False, weights=None, **kwargs):
+        kwargs['n_layer'] = 10
+        kwargs['n_classes'] = 0 if include_top is False else n_classes
+        ResNet.__init__(self, **kwargs)
         self.weights = weights
 
 
