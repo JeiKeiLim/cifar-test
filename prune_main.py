@@ -31,8 +31,11 @@ if __name__ == "__main__":
     parser.add_argument("--tboard-root", default="./export", type=str, help="Tensorboard Log Root. Set this to 'no' will disable writing tensorboards")
     parser.add_argument("--tboard-host", default="0.0.0.0", type=str, help="Tensorboard Host Address")
     parser.add_argument("--tboard-port", default=6006, type=int, help="TensorBoard Port Number")
+    parser.add_argument("--seed", default=7777, type=int, help="Random Seed")
 
     args = parser.parse_args()
+    np.seed(args.seed)
+    tf.random.set_seed(args.seed)
 
     sys.path.extend([args.dataset_lib])
 
@@ -52,18 +55,20 @@ if __name__ == "__main__":
     test_annotation = pd.read_csv(dataset_config['test_annotation'])
 
     if args.reduce_dataset_ratio < 1.0:
-        train_annotation = train_annotation.sample(n=int(train_annotation.shape[0] * args.reduce_dataset_ratio)).reset_index(drop=True)
-        test_annotation = test_annotation.sample(n=int(test_annotation.shape[0] * args.reduce_dataset_ratio)).reset_index(drop=True)
+        train_annotation = train_annotation.sample(n=int(train_annotation.shape[0] * args.reduce_dataset_ratio), random_state=args.seed).reset_index(drop=True)
+        test_annotation = test_annotation.sample(n=int(test_annotation.shape[0] * args.reduce_dataset_ratio), random_state=args.seed).reset_index(drop=True)
 
     img_h, img_w = model.input.shape[1:3]
 
     train_gen = KProductsTFGenerator(train_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
                                      shuffle=True, image_size=(img_h, img_w),
                                      augment_func=None,
-                                     preprocess_func=preprocessing.get_preprocess_by_model_name(args.model_name))
+                                     preprocess_func=preprocessing.get_preprocess_by_model_name(args.model_name),
+                                     seed=args.seed)
     test_gen = KProductsTFGenerator(test_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
                                      shuffle=False, image_size=(img_h, img_w),
-                                     preprocess_func=preprocessing.get_preprocess_by_model_name(args.model_name))
+                                     preprocess_func=preprocessing.get_preprocess_by_model_name(args.model_name),
+                                    seed=args.seed)
 
     train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch * 2)
     test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
