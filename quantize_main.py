@@ -17,7 +17,7 @@ if __name__ == "__main__":
     parser.add_argument("--model-name", default="resnet18_custom", type=str, help="Model Name for Image Pre-Process Decision Purpose")
     parser.add_argument("--dataset-lib", default="../aihub_dataset", help="Dataset Library Path")
     parser.add_argument("--dataset-conf", default="./conf/dataset_conf.json", help="Dataset Configuration Path")
-    parser.add_argument("--config", type=str, default="./quant_conf.json", help="Configuration file path. (Default: ./quant_conf.json)")
+    parser.add_argument("--config", type=str, default="./conf/quant_conf.json", help="Configuration file path. (Default: ./quant_conf.json)")
     parser.add_argument("--out", type=str, default="None", help="Destination of Pruned Model Path. If 'None' is given, It will store at saved model path")
     parser.add_argument("--batch", default=8, type=int, help="Batch Size. (Default: 8)")
     parser.add_argument("--epochs", default=10, type=int, help="Epochs. (Default: 10)")
@@ -27,11 +27,12 @@ if __name__ == "__main__":
     parser.add_argument("--tboard-root", default="./export", type=str, help="Tensorboard Log Root. Set this to 'no' will disable writing tensorboards")
     parser.add_argument("--tboard-host", default="0.0.0.0", type=str, help="Tensorboard Host Address")
     parser.add_argument("--tboard-port", default=6006, type=int, help="TensorBoard Port Number")
+    parser.add_argument("--lr", default=0.001, type=float, help="Learning Rate.")
     parser.add_argument("--seed", default=7777, type=int, help="Random Seed")
 
     args = parser.parse_args()
 
-    np.seed(args.seed)
+    np.random.seed(args.seed)
     tf.random.set_seed(args.seed)
 
     sys.path.extend([args.dataset_lib])
@@ -75,6 +76,9 @@ if __name__ == "__main__":
     print("n_train: {:,}, n_test: {:,}".format(n_train, n_test))
 
     if np.isnan(args.baseline_acc) and np.isnan(args.baseline_loss):
+        model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
+                      loss=tf.keras.losses.SparseCategoricalCrossentropy(),
+                      metrics=['accuracy'])
         baseline_loss, baseline_acc = model.evaluate(test_set, steps=(n_test//args.batch), verbose=1)
     else:
         baseline_acc = args.baseline_acc if args.baseline_acc > 0 else float('nan')
@@ -85,7 +89,7 @@ if __name__ == "__main__":
     quantize_model = tfmot.quantization.keras.quantize_model
 
     q_aware_model = quantize_model(model)
-    q_aware_model.compile(optimizer='adam',
+    q_aware_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
                           loss=tf.keras.losses.SparseCategoricalCrossentropy(),
                           metrics=['accuracy'])
     q_aware_model.summary()
