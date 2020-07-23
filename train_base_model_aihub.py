@@ -78,6 +78,7 @@ if __name__ == "__main__":
 
     dataset = KProductsDataset(args.dataset_conf)
 
+    #TODO Change a method splitting training and test set
     annotations = dataset.annotations.sample(n=dataset.annotations.shape[0]).reset_index(drop=True)
     n_train = int(annotations.shape[0] * 0.7)
 
@@ -136,9 +137,6 @@ if __name__ == "__main__":
     test_gen = KProductsTFGenerator(test_annotation, dataset.config['label_dict'], dataset.config['dataset_root'],
                                      shuffle=False, image_size=(args.img_h, args.img_w),
                                      preprocess_func=preprocessing.get_preprocess_by_model_name(args.model))
-
-    # train_gen = CifarGenerator(x_train, y_train.flatten(), augment=True, model_type=args.model, image_size=(args.img_w, args.img_h))
-    # test_gen = CifarGenerator(x_test, y_test.flatten(), augment=False, model_type=args.model, image_size=(args.img_w, args.img_h))
 
     train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch * 2)
     test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
