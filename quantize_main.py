@@ -6,7 +6,7 @@ from tfhelper.tflite import keras_model_to_tflite, evaluate_tflite_interpreter
 from tqdm import tqdm
 import argparse
 import datetime
-from tfhelper.tensorboard import run_tensorboard, wait_ctrl_c
+from tfhelper.tensorboard import run_tensorboard, wait_ctrl_c, get_tf_callbacks
 import sys
 import pandas as pd
 
@@ -82,7 +82,27 @@ if __name__ == "__main__":
 
     print("Baseline Loss, Accuracy: {:.8f}, {:.3f}%, ".format(baseline_loss, baseline_acc*100))
 
-    ## Quantization not performing for now
+    quantize_model = tfmot.quantization.keras.quantize_model
+
+    q_aware_model = quantize_model(model)
+    q_aware_model.compile(optimizer='adam',
+                          loss=tf.keras.losses.SparseCategoricalCrossentropy(),
+                          metrics=['accuracy'])
+    q_aware_model.summary()
+
+    tboard_callback = False if args.no_tensorboard_writing else True
+
+    callbacks, tboard_root = get_tf_callbacks(f"{args.tboard_root}/quantization_", tboard_callback=tboard_callback,
+                                              confuse_callback=True, test_dataset=test_set,
+                                              label_info=list(dataset_config['label_dict'].values()),
+                                              modelsaver_callback=False,
+                                              earlystop_callback=False,
+                                              sparsity_callback=False, sparsity_threshold=0.05)
+
+    run_tensorboard(tboard_root, host=args.tboard_host, port=args.tboard_port)
+
+    q_aware_model.fit(train_set, epochs=args.epochs, validation_data=test_set)
+
     if args.out == "None":
         args.out = args.path
 
@@ -94,7 +114,7 @@ if __name__ == "__main__":
 
     quant_conf["out_path"] = f"{out_root}/{out_file}_quant_{quant_conf['quantization_type']}.tflite"
 
-    keras_model_to_tflite(model, quant_conf)
+    keras_model_to_tflite(q_aware_model, quant_conf)
 
     ## Evaluate Quantized Model
     tf_interpreter = tf.lite.Interpreter(model_path=quant_conf['out_path'])
@@ -123,3 +143,4 @@ if __name__ == "__main__":
     differene_acc = quantized_accuracy - baseline_acc
     print("Quantized Accuracy: {:.3f} ({}{:.3f}%)".format(quantized_accuracy * 100, "+" if differene_acc > 0 else "", differene_acc))
 
+    wait_ctrl_c()
