@@ -147,7 +147,7 @@ if __name__ == "__main__":
     out_file = out_file[:ext_idx] if ext_idx > 0 else out_file
 
     tf.keras.models.save_model(model_for_pruning, f"{out_root}/{out_file}_{model_for_pruning_accuracy:.5f}.h5")
-    tf.keras.models.save_model(model_for_export, f"{out_root}/{out_file}_pruned_export_{model_for_pruning_accuracy:.5f}")
+    tf.keras.models.save_model(model_for_export, f"{out_root}/{out_file}_pruned_export_{model_for_pruning_accuracy:.5f}.h5")
 
     ### Prunning END
 
