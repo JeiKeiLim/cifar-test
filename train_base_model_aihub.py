@@ -135,8 +135,8 @@ if __name__ == "__main__":
                                      augment_func=None,
                                      preprocess_func=preprocessing.get_preprocess_by_model_name(args.model))
     test_gen = KProductsTFGenerator(test_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
-                                     shuffle=False, image_size=(args.img_h, args.img_w),
-                                     preprocess_func=preprocessing.get_preprocess_by_model_name(args.model))
+                                    shuffle=False, image_size=(args.img_h, args.img_w),
+                                    preprocess_func=preprocessing.get_preprocess_by_model_name(args.model))
 
     train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch * 2)
     test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
@@ -212,7 +212,8 @@ if __name__ == "__main__":
     tboard_callback = False if args.no_tensorboard_writing else True
 
     callbacks, tboard_root = get_tf_callbacks(tboard_path, tboard_callback=tboard_callback, tboard_profile_batch=args.tboard_profile,
-                                              confuse_callback=False, test_dataset=test_set, save_metric=save_metric,
+                                              confuse_callback=True, test_dataset=test_set, save_metric=save_metric,
+                                              label_info=list(dataset_config['label_dict'].values()),
                                               modelsaver_callback=True,
                                               earlystop_callback=False,
                                               sparsity_callback=True, sparsity_threshold=0.05)
