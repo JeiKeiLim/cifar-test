@@ -10,6 +10,7 @@ import argparse
 import datetime
 from tfhelper.tensorboard import run_tensorboard, wait_ctrl_c, SparsityCallback
 import sys
+import pandas as pd
 
 
 if __name__ == "__main__":
@@ -35,7 +36,6 @@ if __name__ == "__main__":
 
     sys.path.extend([args.dataset_lib])
 
-    from dataset import KProductsDataset
     from dataset.tfkeras import KProductsTFGenerator
     from dataset.tfkeras import preprocessing
 
@@ -45,28 +45,23 @@ if __name__ == "__main__":
 
     model = tf.keras.models.load_model(args.path)
 
-    dataset = KProductsDataset(args.dataset_conf)
+    with open(args.dataset_conf, 'r') as f:
+        dataset_config = json.load(f)
 
-    #TODO Change a method splitting training and test set
-    annotations = dataset.annotations.sample(n=dataset.annotations.shape[0]).reset_index(drop=True)
-    n_train = int(annotations.shape[0] * 0.7)
+    train_annotation = pd.read_csv(dataset_config['train_annotation'])
+    test_annotation = pd.read_csv(dataset_config['test_annotation'])
 
-    reduce_ratio = args.reduce_dataset_ratio
-
-    train_annotation = annotations.iloc[:n_train]
-    test_annotation = annotations.iloc[n_train:]
-
-    if reduce_ratio < 1.0:
-        train_annotation = train_annotation.sample(n=int(train_annotation.shape[0] * reduce_ratio)).reset_index(drop=True)
-        test_annotation = test_annotation.sample(n=int(test_annotation.shape[0] * reduce_ratio)).reset_index(drop=True)
+    if args.reduce_dataset_ratio < 1.0:
+        train_annotation = train_annotation.sample(n=int(train_annotation.shape[0] * args.reduce_dataset_ratio)).reset_index(drop=True)
+        test_annotation = test_annotation.sample(n=int(test_annotation.shape[0] * args.reduce_dataset_ratio)).reset_index(drop=True)
 
     img_h, img_w = model.input.shape[1:3]
 
-    train_gen = KProductsTFGenerator(train_annotation, dataset.config['label_dict'], dataset.config['dataset_root'],
+    train_gen = KProductsTFGenerator(train_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
                                      shuffle=True, image_size=(img_h, img_w),
                                      augment_func=None,
                                      preprocess_func=preprocessing.get_preprocess_by_model_name(args.model_name))
-    test_gen = KProductsTFGenerator(test_annotation, dataset.config['label_dict'], dataset.config['dataset_root'],
+    test_gen = KProductsTFGenerator(test_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
                                      shuffle=False, image_size=(img_h, img_w),
                                      preprocess_func=preprocessing.get_preprocess_by_model_name(args.model_name))
 

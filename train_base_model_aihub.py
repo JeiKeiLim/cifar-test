@@ -6,6 +6,8 @@ import argparse
 from tfhelper.tensorboard import get_tf_callbacks, run_tensorboard, wait_ctrl_c
 from tfhelper.gpu import allow_gpu_memory_growth
 from models import resnet, DistillationModel, SelfDistillationModel
+import json
+import pandas as pd
 
 
 if __name__ == "__main__":
@@ -72,18 +74,16 @@ if __name__ == "__main__":
 
     sys.path.extend([args.dataset_lib])
 
-    from dataset import KProductsDataset
     from dataset.tfkeras import KProductsTFGenerator
     from dataset.tfkeras import preprocessing
 
-    dataset = KProductsDataset(args.dataset_conf)
+    with open(args.dataset_conf, 'r') as f:
+        dataset_config = json.load(f)
 
-    #TODO Change a method splitting training and test set
-    annotations = dataset.annotations.sample(n=dataset.annotations.shape[0]).reset_index(drop=True)
-    n_train = int(annotations.shape[0] * 0.7)
+    train_annotation = pd.read_csv(dataset_config['train_annotation'])
+    test_annotation = pd.read_csv(dataset_config['test_annotation'])
 
-    train_annotation = annotations.iloc[:n_train]
-    test_annotation = annotations.iloc[n_train:]
+    n_classes = len(dataset_config['label_dict'])
 
     TargetModel = None
 
@@ -113,7 +113,7 @@ if __name__ == "__main__":
         for i in range(0, len(model.layers)-args.unfreeze):
             model.layers[i].trainable = False
 
-    conv2d = tf.keras.layers.Conv2D(dataset.n_classes, 1, padding='SAME', activation=None)(model.output)
+    conv2d = tf.keras.layers.Conv2D(n_classes, 1, padding='SAME', activation=None)(model.output)
     conv2d = tf.keras.layers.BatchNormalization()(conv2d)
     conv2d = tf.keras.layers.ReLU(name="final_block_activation")(conv2d)
 
@@ -130,11 +130,11 @@ if __name__ == "__main__":
     if args.summary:
         exit(0)
 
-    train_gen = KProductsTFGenerator(train_annotation, dataset.config['label_dict'], dataset.config['dataset_root'],
+    train_gen = KProductsTFGenerator(train_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
                                      shuffle=True, image_size=(args.img_h, args.img_w),
                                      augment_func=None,
                                      preprocess_func=preprocessing.get_preprocess_by_model_name(args.model))
-    test_gen = KProductsTFGenerator(test_annotation, dataset.config['label_dict'], dataset.config['dataset_root'],
+    test_gen = KProductsTFGenerator(test_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
                                      shuffle=False, image_size=(args.img_h, args.img_w),
                                      preprocess_func=preprocessing.get_preprocess_by_model_name(args.model))
 
