@@ -54,8 +54,8 @@ if __name__ == "__main__":
     test_annotation = annotations.iloc[n_train:]
 
     if reduce_ratio < 1.0:
-        train_annotation.sample(n=int(train_annotation.shape[0] * reduce_ratio)).reset_index(drop=True)
-        test_annotation.sample(n=int(test_annotation.shape[0] * reduce_ratio)).reset_index(drop=True)
+        train_annotation = train_annotation.sample(n=int(train_annotation.shape[0] * reduce_ratio)).reset_index(drop=True)
+        test_annotation = test_annotation.sample(n=int(test_annotation.shape[0] * reduce_ratio)).reset_index(drop=True)
 
     img_h, img_w = model.input.shape[1:3]
 
@@ -72,6 +72,8 @@ if __name__ == "__main__":
 
     n_train = train_gen.annotation.shape[0]
     n_test = test_gen.annotation.shape[0]
+
+    print("n_train: {:,}, n_test: {:,}".format(n_train, n_test))
 
     if np.isnan(args.baseline_acc) and np.isnan(args.baseline_loss):
         baseline_loss, baseline_acc = model.evaluate(test_set, steps=(n_test//args.batch), verbose=1)
@@ -94,6 +96,9 @@ if __name__ == "__main__":
         init_sparsity = sparsities.mean()
     else:
         init_sparsity = args.init_sparsity
+
+    print("Initial Sparsity: {:.5f}".format(init_sparsity))
+    print("Target Sparsity: {:.5f}".format(args.final_sparsity))
 
     pruning_params = {
         'pruning_schedule': tfmot.sparsity.keras.PolynomialDecay(initial_sparsity=init_sparsity,
