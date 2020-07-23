@@ -27,6 +27,9 @@ if __name__ == "__main__":
     parser.add_argument("--final-sparsity", default=0.8, type=float, help="Final sparsity for pruning.")
     parser.add_argument("--sparsity-threshold", default=0.05, type=float, help="Sparsity threshold value to find sparsity levels on each layer.")
     parser.add_argument("--reduce-dataset-ratio", default=1.0, type=float, help="Reducing dataset image numbers. (0.0 ~ 1.0)")
+    parser.add_argument("--tboard-root", default="./export", type=str, help="Tensorboard Log Root. Set this to 'no' will disable writing tensorboards")
+    parser.add_argument("--tboard-host", default="0.0.0.0", type=str, help="Tensorboard Host Address")
+    parser.add_argument("--tboard-port", default=6006, type=int, help="TensorBoard Port Number")
 
     args = parser.parse_args()
 
@@ -99,6 +102,7 @@ if __name__ == "__main__":
 
     print("Initial Sparsity: {:.5f}".format(init_sparsity))
     print("Target Sparsity: {:.5f}".format(args.final_sparsity))
+    print("Total Steps: {}".format(end_step))
 
     pruning_params = {
         'pruning_schedule': tfmot.sparsity.keras.PolynomialDecay(initial_sparsity=init_sparsity,
@@ -115,13 +119,13 @@ if __name__ == "__main__":
     model_for_pruning.summary()
 
     path_postfix = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    tboard_path = f"./export/pruning_{model_name}{path_postfix}/"
+    tboard_path = f"{args.tboard_root}/pruning_{model_name}{path_postfix}/"
     callbacks = [
             tfmot.sparsity.keras.UpdatePruningStep(),
             tfmot.sparsity.keras.PruningSummaries(log_dir=tboard_path),
         ]
 
-    run_tensorboard(tboard_path)
+    run_tensorboard(tboard_path, host=args.tboard_host, port=args.tboard_port)
 
     model_for_pruning.fit(train_set, epochs=args.epochs, validation_data=test_set, callbacks=callbacks)
 
