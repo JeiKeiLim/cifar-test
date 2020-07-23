@@ -4,7 +4,7 @@ import efficientnet.tfkeras as efn
 import argparse
 from tfhelper.tensorboard import get_tf_callbacks, run_tensorboard, wait_ctrl_c
 from tfhelper.gpu import allow_gpu_memory_growth
-from models import resnet, DistillationModel, SelfDistillationModel
+from models import resnet, DistillationModel, SelfDistillationModel, microjknet
 import json
 import pandas as pd
 
@@ -40,7 +40,8 @@ if __name__ == "__main__":
         "nasnetmobile": tf.keras.applications.NASNetMobile,
         "xception": tf.keras.applications.Xception,
         "resnet18": resnet.ResNet18,
-        "resnet10": resnet.ResNet10
+        "resnet10": resnet.ResNet10,
+        "microjknet": microjknet.MicroJKNet
     }
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -71,6 +72,10 @@ if __name__ == "__main__":
     parser.add_argument("--debug", default=False, action='store_true', help="Debugging Mode")
     parser.add_argument("--float16", default=False, action='store_true', help="Use Mixed Precision with float16")
     parser.add_argument("--float16-dtype", default='mixed_float16', type=str, help="Mixed float16 precision type.")
+    parser.add_argument("--growth-rate", default=12, type=int, help="MicroJKNet Growth Rate")
+    parser.add_argument("--model-depth", default=3, type=int, help="MicroJKNet Depth")
+    parser.add_argument("--model-in-depth", default=3, type=int, help="MicroJKNet In-Depth")
+    parser.add_argument("--expansion", default=4, type=int, help="MicroJKNet Expansion")
 
     args = parser.parse_args()
 
@@ -100,12 +105,24 @@ if __name__ == "__main__":
 
     allow_gpu_memory_growth()
 
-    kwargs = {'input_shape': (args.img_h, args.img_w, 3), 'include_top':False, 'weights': 'imagenet'}
+    kwargs = {'input_shape': (args.img_h, args.img_w, 3), 'include_top': False, 'weights': 'imagenet'}
+    append_top_layer = True
     try:
         if issubclass(TargetModel, resnet.ResNet):
             kwargs['float16'] = args.float16
             kwargs['float16_dtype'] = args.float16_dtype
             kwargs['init_channel'] = args.resnet_init_channel
+        elif issubclass(TargetModel, microjknet.MicroJKNet):
+            kwargs['float16'] = args.float16
+            kwargs['float16_dtype'] = args.float16_dtype
+            kwargs['growth_rate'] = args.growth_rate
+            kwargs['depth'] = args.model_depth
+            kwargs['in_depth'] = args.model_in_depth
+            kwargs['expansion'] = args.expansion
+            kwargs['n_classes'] = n_classes
+            kwargs.pop("include_top")
+            kwargs.pop("weights")
+            append_top_layer = False
     except:
         pass
 
@@ -128,14 +145,17 @@ if __name__ == "__main__":
         for i in range(0, len(model.layers)-args.unfreeze):
             model.layers[i].trainable = False
 
-    conv2d = tf.keras.layers.Conv2D(n_classes, 1, padding='SAME', activation=None, dtype=dtype)(model.output)
-    conv2d = tf.keras.layers.BatchNormalization(dtype=dtype)(conv2d)
-    conv2d = tf.keras.layers.ReLU(name="final_block_activation", dtype=dtype)(conv2d)
+    if append_top_layer:
+        conv2d = tf.keras.layers.Conv2D(n_classes, 1, padding='SAME', activation=None, dtype=dtype)(model.output)
+        conv2d = tf.keras.layers.BatchNormalization(dtype=dtype)(conv2d)
+        conv2d = tf.keras.layers.ReLU(name="final_block_activation", dtype=dtype)(conv2d)
 
-    output = tf.keras.layers.GlobalAveragePooling2D(dtype=dtype)(conv2d)
-    output = tf.keras.layers.Softmax(name="out_dense")(output)
+        output = tf.keras.layers.GlobalAveragePooling2D(dtype=dtype)(conv2d)
+        output = tf.keras.layers.Softmax(name="out_dense")(output)
 
-    n_model = tf.keras.models.Model(model.input, output)
+        n_model = tf.keras.models.Model(model.input, output)
+    else:
+        n_model = model
 
     if args.weights != "":
         n_model.load_weights(args.weights)
