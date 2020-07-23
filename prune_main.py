@@ -26,6 +26,7 @@ if __name__ == "__main__":
     parser.add_argument("--init-sparsity", default=0.5, type=float, help="Initial sparsity for pruning. If -1 is given, Initial sparsity is computed by sparsity-threshold.")
     parser.add_argument("--final-sparsity", default=0.8, type=float, help="Final sparsity for pruning.")
     parser.add_argument("--sparsity-threshold", default=0.05, type=float, help="Sparsity threshold value to find sparsity levels on each layer.")
+    parser.add_argument("--reduce-dataset-ratio", default=1.0, type=float, help="Reducing dataset image numbers. (0.0 ~ 1.0)")
 
     args = parser.parse_args()
 
@@ -47,8 +48,14 @@ if __name__ == "__main__":
     annotations = dataset.annotations.sample(n=dataset.annotations.shape[0]).reset_index(drop=True)
     n_train = int(annotations.shape[0] * 0.7)
 
+    reduce_ratio = args.reduce_dataset_ratio
+
     train_annotation = annotations.iloc[:n_train]
     test_annotation = annotations.iloc[n_train:]
+
+    if reduce_ratio < 1.0:
+        train_annotation.sample(n=int(train_annotation.shape[0] * reduce_ratio)).reset_index(drop=True)
+        test_annotation.sample(n=int(test_annotation.shape[0] * reduce_ratio)).reset_index(drop=True)
 
     img_h, img_w = model.input.shape[1:3]
 
@@ -63,8 +70,11 @@ if __name__ == "__main__":
     train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch * 2)
     test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
 
+    n_train = train_gen.annotation.shape[0]
+    n_test = test_gen.annotation.shape[0]
+
     if np.isnan(args.baseline_acc) and np.isnan(args.baseline_loss):
-        baseline_loss, baseline_acc = model.evaluate(test_set)
+        baseline_loss, baseline_acc = model.evaluate(test_set, steps=(n_test//args.batch), verbose=1)
     else:
         baseline_acc = args.baseline_acc if args.baseline_acc > 0 else float('nan')
         baseline_loss = args.baseline_loss if args.baseline_loss > 0 else float('nan')
@@ -74,8 +84,7 @@ if __name__ == "__main__":
 
     prune_low_magnitude = tfmot.sparsity.keras.prune_low_magnitude
 
-    num_data = train_gen.annotation.shape[0] // 10
-    end_step = np.ceil(num_data / args.batch).astype(np.int32) * args.epochs
+    end_step = np.ceil(n_train / args.batch).astype(np.int32) * args.epochs
 
     if args.init_sparsity < 0:
         sparsity_calculater = SparsityCallback(None, sparsity_threshold=args.sparsity_threshold)
@@ -109,9 +118,9 @@ if __name__ == "__main__":
 
     run_tensorboard(tboard_path)
 
-    model_for_pruning.fit(train_set, batch_size=args.batch, epochs=args.epochs, validation_data=test_set, callbacks=callbacks)
+    model_for_pruning.fit(train_set, epochs=args.epochs, validation_data=test_set, callbacks=callbacks)
 
-    _, model_for_pruning_accuracy = model_for_pruning.evaluate(test_set, verbose=1)
+    _, model_for_pruning_accuracy = model_for_pruning.evaluate(test_set, steps=(n_test//args.batch), verbose=1)
 
     model_for_export = tfmot.sparsity.keras.strip_pruning(model_for_pruning)
 
