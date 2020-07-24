@@ -8,7 +8,6 @@ from models import resnet, DistillationModel, SelfDistillationModel, microjknet
 import json
 import pandas as pd
 
-
 if __name__ == "__main__":
 
     model_dict = {
@@ -76,6 +75,8 @@ if __name__ == "__main__":
     parser.add_argument("--model-depth", default=3, type=int, help="MicroJKNet Depth")
     parser.add_argument("--model-in-depth", default=3, type=int, help="MicroJKNet In-Depth")
     parser.add_argument("--expansion", default=4, type=int, help="MicroJKNet Expansion")
+    parser.add_argument("--augment", default="none", type=str, help="Augmentation Method. (auto, album, none)")
+    parser.add_argument("--augment-policy", default="imagenet", type=str, help="Augmentation Policy. (imagenet, cifar10, svhn)")
 
     args = parser.parse_args()
 
@@ -83,6 +84,7 @@ if __name__ == "__main__":
 
     from dataset.tfkeras import KProductsTFGenerator
     from dataset.tfkeras import preprocessing
+    from dataset.tfkeras import ImageNetPolicy, CIFAR10Policy, SVHNPolicy
 
     with open(args.dataset_conf, 'r') as f:
         dataset_config = json.load(f)
@@ -92,6 +94,7 @@ if __name__ == "__main__":
 
     n_classes = len(dataset_config['label_dict'])
 
+    # Setting the model
     TargetModel = None
 
     if args.model in model_dict.keys():
@@ -105,13 +108,16 @@ if __name__ == "__main__":
 
     allow_gpu_memory_growth()
 
+    # Setting model parameters
     kwargs = {'input_shape': (args.img_h, args.img_w, 3), 'include_top': False, 'weights': 'imagenet'}
     append_top_layer = True
     try:
+        # Custom ResNet Model Parameter
         if issubclass(TargetModel, resnet.ResNet):
             kwargs['float16'] = args.float16
             kwargs['float16_dtype'] = args.float16_dtype
             kwargs['init_channel'] = args.resnet_init_channel
+        # Custom MicroJKNet Model Parameter
         elif issubclass(TargetModel, microjknet.MicroJKNet):
             kwargs['float16'] = args.float16
             kwargs['float16_dtype'] = args.float16_dtype
@@ -126,9 +132,11 @@ if __name__ == "__main__":
     except:
         pass
 
+    # Build Model
     model = TargetModel(**kwargs)
 
     if type(model) != tf.keras.models.Model:
+        # Custom Model require to call build_model()
         dtype = model.dtype
         model = model.build_model()
         args.unfreeze = len(model.layers) if args.unfreeze == 0 else args.unfreeze
@@ -136,6 +144,7 @@ if __name__ == "__main__":
     else:
         dtype = tf.float32
 
+    # Freeze / Unfreeze Layers
     if args.unfreeze == 0:
         model.trainable = False
     elif args.unfreeze < 0:
@@ -145,6 +154,7 @@ if __name__ == "__main__":
         for i in range(0, len(model.layers)-args.unfreeze):
             model.layers[i].trainable = False
 
+    # Append Custom Top Layer if needed.
     if append_top_layer:
         conv2d = tf.keras.layers.Conv2D(n_classes, 1, padding='SAME', activation=None, dtype=dtype)(model.output)
         conv2d = tf.keras.layers.BatchNormalization(dtype=dtype)(conv2d)
@@ -162,9 +172,16 @@ if __name__ == "__main__":
     if args.summary:
         exit(0)
 
+    # Augmentation
+    augmentation_func = None
+    augment_in_dtype = "pil"
+    if args.augment == "auto":
+        augmentation_func = SVHNPolicy() if args.augment_policy == "svhn" else CIFAR10Policy() if args.augment_policy == "cifar10" else ImageNetPolicy()
+
+    # Dataset Generator
     train_gen = KProductsTFGenerator(train_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
                                      shuffle=True, image_size=(args.img_h, args.img_w),
-                                     augment_func=None,
+                                     augment_func=augmentation_func, augment_in_dtype=augment_in_dtype,
                                      preprocess_func=preprocessing.get_preprocess_by_model_name(args.model))
     test_gen = KProductsTFGenerator(test_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
                                     shuffle=False, image_size=(args.img_h, args.img_w),

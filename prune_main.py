@@ -1,11 +1,7 @@
 import tensorflow as tf
-from cifar_generator import CifarGenerator
-import efficientnet.tfkeras as efn
 import tensorflow_model_optimization as tfmot
 import numpy as np
 import json
-from tfhelper.tflite import keras_model_to_tflite, evaluate_tflite_interpreter
-from tqdm import tqdm
 import argparse
 import datetime
 from tfhelper.tensorboard import run_tensorboard, wait_ctrl_c, SparsityCallback
