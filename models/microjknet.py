@@ -1,7 +1,6 @@
 import tensorflow as tf
 from models import DenseBottleNeck, DenseReduce, ConvBN, SeparableConvBN
 
-
 class MicroJKNet:
     def __init__(self, input_shape=(None, None, 3), growth_rate=12, depth=3, in_depth=3,
                  Block=DenseBottleNeck, Conv=tf.keras.layers.Conv2D, Activation=tf.keras.layers.ReLU,

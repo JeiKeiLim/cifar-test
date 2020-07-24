@@ -77,6 +77,7 @@ if __name__ == "__main__":
     parser.add_argument("--expansion", default=4, type=int, help="MicroJKNet Expansion")
     parser.add_argument("--augment", default="none", type=str, help="Augmentation Method. (auto, album, none)")
     parser.add_argument("--augment-policy", default="imagenet", type=str, help="Augmentation Policy. (imagenet, cifar10, svhn)")
+    parser.add_argument("--activation", default="relu", type=str, help="Activation Function (relu, swish, hswish)")
 
     args = parser.parse_args()
 
