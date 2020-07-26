@@ -20,6 +20,7 @@ if __name__ == "__main__":
     parser.add_argument("--config", type=str, default="./conf/quant_conf.json", help="Configuration file path. (Default: ./quant_conf.json)")
     parser.add_argument("--out", type=str, default="None", help="Destination of Pruned Model Path. If 'None' is given, It will store at saved model path")
     parser.add_argument("--batch", default=8, type=int, help="Batch Size. (Default: 8)")
+    parser.add_argument("--q-aware-train", default=False, action='store_true', help="Run Quantization Aware Training")
     parser.add_argument("--epochs", default=10, type=int, help="Epochs. (Default: 10)")
     parser.add_argument("--validate", dest="validate", action="store_true", default=False, help="Run Validation. (Default: False)")
     parser.add_argument("--baseline-acc", default=float('nan'), type=float, help="Base Line Accuracy. If both baseline-acc and baseline-loss are not given, model evaluation is performed")
@@ -73,6 +74,8 @@ if __name__ == "__main__":
     n_train = train_gen.annotation.shape[0]
     n_test = test_gen.annotation.shape[0]
 
+    model.summary()
+
     print("n_train: {:,}, n_test: {:,}".format(n_train, n_test))
 
     if np.isnan(args.baseline_acc) and np.isnan(args.baseline_loss):
@@ -86,26 +89,28 @@ if __name__ == "__main__":
 
     print("Baseline Loss, Accuracy: {:.8f}, {:.3f}%, ".format(baseline_loss, baseline_acc*100))
 
-    quantize_model = tfmot.quantization.keras.quantize_model
+    if args.q_aware_train:
+        quantize_model = tfmot.quantization.keras.quantize_model
 
-    q_aware_model = quantize_model(model)
-    q_aware_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
-                          loss=tf.keras.losses.SparseCategoricalCrossentropy(),
-                          metrics=['accuracy'])
-    q_aware_model.summary()
+        q_aware_model = quantize_model(model)
+        q_aware_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
+                              loss=tf.keras.losses.SparseCategoricalCrossentropy(),
+                              metrics=['accuracy'])
+        q_aware_model.summary()
 
-    tboard_callback = False if args.no_tensorboard_writing else True
+        tboard_callback = False if args.no_tensorboard_writing else True
 
-    callbacks, tboard_root = get_tf_callbacks(f"{args.tboard_root}/quantization_", tboard_callback=tboard_callback,
-                                              confuse_callback=True, test_dataset=test_set,
-                                              label_info=list(dataset_config['label_dict'].values()),
-                                              modelsaver_callback=False,
-                                              earlystop_callback=False,
-                                              sparsity_callback=False, sparsity_threshold=0.05)
+        callbacks, tboard_root = get_tf_callbacks(f"{args.tboard_root}/quantization_", tboard_callback=tboard_callback,
+                                                  confuse_callback=True, test_dataset=test_set,
+                                                  label_info=list(dataset_config['label_dict'].values()),
+                                                  modelsaver_callback=False,
+                                                  earlystop_callback=False,
+                                                  sparsity_callback=False, sparsity_threshold=0.05)
 
-    run_tensorboard(tboard_root, host=args.tboard_host, port=args.tboard_port)
+        run_tensorboard(tboard_root, host=args.tboard_host, port=args.tboard_port)
 
-    q_aware_model.fit(train_set, epochs=args.epochs, validation_data=test_set)
+        q_aware_model.fit(train_set, epochs=args.epochs, validation_data=test_set)
+        model = q_aware_model
 
     if args.out == "None":
         args.out = args.path
@@ -118,7 +123,7 @@ if __name__ == "__main__":
 
     quant_conf["out_path"] = f"{out_root}/{out_file}_quant_{quant_conf['quantization_type']}.tflite"
 
-    keras_model_to_tflite(q_aware_model, quant_conf)
+    keras_model_to_tflite(model, quant_conf)
 
     ## Evaluate Quantized Model
     tf_interpreter = tf.lite.Interpreter(model_path=quant_conf['out_path'])
@@ -147,4 +152,5 @@ if __name__ == "__main__":
     differene_acc = quantized_accuracy - baseline_acc
     print("Quantized Accuracy: {:.3f} ({}{:.3f}%)".format(quantized_accuracy * 100, "+" if differene_acc > 0 else "", differene_acc))
 
-    wait_ctrl_c()
+    if args.q_aware_train:
+        wait_ctrl_c()
