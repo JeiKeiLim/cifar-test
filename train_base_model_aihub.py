@@ -81,6 +81,7 @@ if __name__ == "__main__":
     parser.add_argument("--activation", default="relu", type=str, help="Activation Function (relu, swish, hswish)")
     parser.add_argument("--dropout", default=0.0, type=float, help="Dropout probability. (MicroJKNet Only)")
     parser.add_argument("--conv", default="conv2d", type=str, help="Convolution Type. (conv2d, sep-conv). (MicroJKNet Only)")
+    parser.add_argument("--load-all", default=False, action='store_true', help="Loading All Dataset into memory.")
 
     args = parser.parse_args()
 
@@ -194,10 +195,12 @@ if __name__ == "__main__":
     train_gen = KProductsTFGenerator(train_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
                                      shuffle=True, image_size=(args.img_h, args.img_w),
                                      augment_func=augmentation_func, augment_in_dtype=augment_in_dtype,
-                                     preprocess_func=preprocessing.get_preprocess_by_model_name(args.model))
+                                     preprocess_func=preprocessing.get_preprocess_by_model_name(args.model),
+                                     load_all=args.load_all)
     test_gen = KProductsTFGenerator(test_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
                                     shuffle=False, image_size=(args.img_h, args.img_w),
-                                    preprocess_func=preprocessing.get_preprocess_by_model_name(args.model))
+                                    preprocess_func=preprocessing.get_preprocess_by_model_name(args.model),
+                                    load_all=args.load_all)
 
     train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch * 2)
     test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)

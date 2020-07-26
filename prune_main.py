@@ -33,6 +33,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", default=7777, type=int, help="Random Seed")
     parser.add_argument("--opt", default=7, type=int, help="Reducing Model Size Optimization Level. (0~9)")
     parser.add_argument("--lr", default=0.001, type=float, help="Learning Rate.")
+    parser.add_argument("--load-all", default=False, action='store_true', help="Loading All Dataset into memory.")
 
     args = parser.parse_args()
     np.random.seed(args.seed)
@@ -72,11 +73,11 @@ if __name__ == "__main__":
                                      shuffle=True, image_size=(img_h, img_w),
                                      augment_func=augmentation_func, augment_in_dtype=augment_in_dtype,
                                      preprocess_func=preprocessing.get_preprocess_by_model_name(args.model_name),
-                                     seed=args.seed)
+                                     seed=args.seed, load_all=args.load_all)
     test_gen = KProductsTFGenerator(test_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
                                      shuffle=False, image_size=(img_h, img_w),
                                      preprocess_func=preprocessing.get_preprocess_by_model_name(args.model_name),
-                                    seed=args.seed)
+                                    seed=args.seed, load_all=args.load_all)
 
     train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch * 2)
     test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
