@@ -74,7 +74,7 @@ if __name__ == "__main__":
     parser.add_argument("--growth-rate", default=12, type=int, help="MicroJKNet Growth Rate")
     parser.add_argument("--model-depth", default=3, type=int, help="MicroJKNet Depth")
     parser.add_argument("--model-in-depth", default=3, type=int, help="MicroJKNet In-Depth")
-    parser.add_argument("--compression_rate", default=2.0, type=float, help="MicroJKNet Compression Rate")
+    parser.add_argument("--compression-rate", default=2.0, type=float, help="MicroJKNet Compression Rate")
     parser.add_argument("--expansion", default=4, type=int, help="MicroJKNet Expansion")
     parser.add_argument("--augment", default="none", type=str, help="Augmentation Method. (auto, album, none)")
     parser.add_argument("--augment-policy", default="imagenet", type=str, help="Augmentation Policy. (imagenet, cifar10, svhn)")
