@@ -30,7 +30,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", default=7777, type=int, help="Random Seed")
 
     args = parser.parse_args()
-    np.seed(args.seed)
+    np.random.seed(args.seed)
     tf.random.set_seed(args.seed)
 
     sys.path.extend([args.dataset_lib])
