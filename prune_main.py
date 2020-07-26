@@ -28,8 +28,11 @@ if __name__ == "__main__":
     parser.add_argument("--tboard-root", default="./export", type=str, help="Tensorboard Log Root. Set this to 'no' will disable writing tensorboards")
     parser.add_argument("--tboard-host", default="0.0.0.0", type=str, help="Tensorboard Host Address")
     parser.add_argument("--tboard-port", default=6006, type=int, help="TensorBoard Port Number")
+    parser.add_argument("--augment", default="none", type=str, help="Augmentation Method. (auto, album, none)")
+    parser.add_argument("--augment-policy", default="imagenet", type=str, help="Augmentation Policy. (imagenet, cifar10, svhn)")
     parser.add_argument("--seed", default=7777, type=int, help="Random Seed")
     parser.add_argument("--opt", default=7, type=int, help="Reducing Model Size Optimization Level. (0~9)")
+    parser.add_argument("--lr", default=0.001, type=float, help="Learning Rate.")
 
     args = parser.parse_args()
     np.random.seed(args.seed)
@@ -39,6 +42,7 @@ if __name__ == "__main__":
 
     from dataset.tfkeras import KProductsTFGenerator
     from dataset.tfkeras import preprocessing
+    from dataset.tfkeras import ImageNetPolicy, CIFAR10Policy, SVHNPolicy
 
     file_name = args.path.split("/")[-1]
     file_root = "/".join(args.path.split("/")[:-1])
@@ -56,11 +60,17 @@ if __name__ == "__main__":
         train_annotation = train_annotation.sample(n=int(train_annotation.shape[0] * args.reduce_dataset_ratio), random_state=args.seed).reset_index(drop=True)
         test_annotation = test_annotation.sample(n=int(test_annotation.shape[0] * args.reduce_dataset_ratio), random_state=args.seed).reset_index(drop=True)
 
+    # Augmentation
+    augmentation_func = None
+    augment_in_dtype = "pil"
+    if args.augment == "auto":
+        augmentation_func = SVHNPolicy() if args.augment_policy == "svhn" else CIFAR10Policy() if args.augment_policy == "cifar10" else ImageNetPolicy()
+
     img_h, img_w = model.input.shape[1:3]
 
     train_gen = KProductsTFGenerator(train_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
                                      shuffle=True, image_size=(img_h, img_w),
-                                     augment_func=None,
+                                     augment_func=augmentation_func, augment_in_dtype=augment_in_dtype,
                                      preprocess_func=preprocessing.get_preprocess_by_model_name(args.model_name),
                                      seed=args.seed)
     test_gen = KProductsTFGenerator(test_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
@@ -102,7 +112,7 @@ if __name__ == "__main__":
     }
 
     model_for_pruning = prune_low_magnitude(model, **pruning_params)
-    model_for_pruning.compile(optimizer='adam',
+    model_for_pruning.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
                               loss=tf.keras.losses.SparseCategoricalCrossentropy(),
                               metrics=['accuracy'])
 
@@ -138,7 +148,6 @@ if __name__ == "__main__":
 
     tf.keras.models.save_model(model_for_export, f"{out_root}/{out_file}_pruned_export_{model_for_pruning_accuracy:.5f}.h5")
     ModelReducer(f"{out_root}/{out_file}_pruned_export_{model_for_pruning_accuracy:.5f}.h5", opt=args.opt).reduce()
-
 
     ### Prunning END
 
