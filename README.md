@@ -82,8 +82,11 @@ usage: train_base_model_aihub.py [-h] [--dataset-conf DATASET_CONF]
                                  [--growth-rate GROWTH_RATE]
                                  [--model-depth MODEL_DEPTH]
                                  [--model-in-depth MODEL_IN_DEPTH]
+                                 [--compression_rate COMPRESSION_RATE]
                                  [--expansion EXPANSION] [--augment AUGMENT]
                                  [--augment-policy AUGMENT_POLICY]
+                                 [--activation ACTIVATION] [--dropout DROPOUT]
+                                 [--conv CONV]
 optional arguments:
   -h, --help            show this help message and exit
   --dataset-conf DATASET_CONF
@@ -141,6 +144,8 @@ optional arguments:
                         MicroJKNet Depth (default: 3)
   --model-in-depth MODEL_IN_DEPTH
                         MicroJKNet In-Depth (default: 3)
+  --compression_rate COMPRESSION_RATE
+                        MicroJKNet Compression Rate (default: 2.0)
   --expansion EXPANSION
                         MicroJKNet Expansion (default: 4)
   --augment AUGMENT     Augmentation Method. (auto, album, none) (default:
@@ -148,6 +153,11 @@ optional arguments:
   --augment-policy AUGMENT_POLICY
                         Augmentation Policy. (imagenet, cifar10, svhn)
                         (default: imagenet)
-
+  --activation ACTIVATION
+                        Activation Function (relu, swish, hswish) (default:
+                        relu)
+  --dropout DROPOUT     Dropout probability. (MicroJKNet Only) (default: 0.0)
+  --conv CONV           Convolution Type. (conv2d, sep-conv). (MicroJKNet
+                        Only) (default: conv2d)
 ```
 

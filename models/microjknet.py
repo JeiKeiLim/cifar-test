@@ -1,11 +1,12 @@
 import tensorflow as tf
 from models import DenseBottleNeck, DenseReduce, ConvBN, SeparableConvBN
 
+
 class MicroJKNet:
     def __init__(self, input_shape=(None, None, 3), growth_rate=12, depth=3, in_depth=3,
                  Block=DenseBottleNeck, Conv=tf.keras.layers.Conv2D, Activation=tf.keras.layers.ReLU,
                  expansion=4, n_classes=0, p_drop=0.0,
-                 reduce_rate=2, reduce_kernel_size=(3, 3),
+                 compression_rate=2, reduce_kernel_size=(3, 3),
                  float16=False, float16_dtype='mixed_float16'):
         self.growth_rate = growth_rate
         self.p_drop = p_drop
@@ -19,7 +20,7 @@ class MicroJKNet:
         self.Conv = Conv
         self.Activation = Activation
         self.expansion = expansion
-        self.reduce_rate = reduce_rate
+        self.compression_rate = compression_rate
         self.reduce_kernel_size = reduce_kernel_size
 
     def get_layer(self, input_layer):
@@ -28,7 +29,7 @@ class MicroJKNet:
         for i in range(self.depth):
             x = self.dense_block(x, name=f"dense_block{i:02d}_")
             if (i+1) < self.depth:
-                x = self.reduce_block(x, reduce_rate=self.reduce_rate, name=f"reduce_block{i:02d}")
+                x = self.reduce_block(x, compression_rate=self.compression_rate, name=f"reduce_block{i:02d}")
 
         x = tf.keras.layers.BatchNormalization(name=f"out_bn", dtype=self.dtype)(x)
         x = self.Activation(name="out_act", dtype=self.dtype)(x)
@@ -62,8 +63,8 @@ class MicroJKNet:
         layers = tf.keras.layers.Concatenate(name=f"{name}_out_concat", dtype=self.dtype)(layers)
         return layers
 
-    def reduce_block(self, x, reduce_rate=2, name="reduce_block"):
-        n_filter = int(x.shape[-1] // reduce_rate)
+    def reduce_block(self, x, compression_rate=2, name="reduce_block"):
+        n_filter = int(x.shape[-1] // compression_rate)
         x = DenseReduce(n_filter, downsample_kernel_size=self.reduce_kernel_size,
                         Activation=self.Activation, name=name, dtype=self.dtype)(x)
         return x

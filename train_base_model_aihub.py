@@ -4,7 +4,7 @@ import efficientnet.tfkeras as efn
 import argparse
 from tfhelper.tensorboard import get_tf_callbacks, run_tensorboard, wait_ctrl_c
 from tfhelper.gpu import allow_gpu_memory_growth
-from models import resnet, DistillationModel, SelfDistillationModel, microjknet
+from models import resnet, DistillationModel, SelfDistillationModel, microjknet, activations
 import json
 import pandas as pd
 
@@ -74,10 +74,13 @@ if __name__ == "__main__":
     parser.add_argument("--growth-rate", default=12, type=int, help="MicroJKNet Growth Rate")
     parser.add_argument("--model-depth", default=3, type=int, help="MicroJKNet Depth")
     parser.add_argument("--model-in-depth", default=3, type=int, help="MicroJKNet In-Depth")
+    parser.add_argument("--compression_rate", default=2.0, type=float, help="MicroJKNet Compression Rate")
     parser.add_argument("--expansion", default=4, type=int, help="MicroJKNet Expansion")
     parser.add_argument("--augment", default="none", type=str, help="Augmentation Method. (auto, album, none)")
     parser.add_argument("--augment-policy", default="imagenet", type=str, help="Augmentation Policy. (imagenet, cifar10, svhn)")
     parser.add_argument("--activation", default="relu", type=str, help="Activation Function (relu, swish, hswish)")
+    parser.add_argument("--dropout", default=0.0, type=float, help="Dropout probability. (MicroJKNet Only)")
+    parser.add_argument("--conv", default="conv2d", type=str, help="Convolution Type. (conv2d, sep-conv). (MicroJKNet Only)")
 
     args = parser.parse_args()
 
@@ -127,6 +130,11 @@ if __name__ == "__main__":
             kwargs['in_depth'] = args.model_in_depth
             kwargs['expansion'] = args.expansion
             kwargs['n_classes'] = n_classes
+            kwargs['compression_rate'] = args.compression_rate
+            kwargs['Activation'] = activations.Hswish if args.activation == 'hswish' else activations.Swish if args.activation == 'swish' else tf.keras.layers.ReLU
+            kwargs['p_drop'] = args.dropout
+            kwargs['Conv'] = tf.keras.layers.SeparableConv2D if args.conv == "sep-conv" else tf.keras.layers.Conv2D
+            args.model += f"({args.growth_rate},{args.model_depth},{args.model_in_depth},{args.expansion},{args.compression_rate},{args.activation})"
             kwargs.pop("include_top")
             kwargs.pop("weights")
             append_top_layer = False
@@ -170,6 +178,9 @@ if __name__ == "__main__":
 
     n_model.summary()
 
+    print("=" * 50)
+    print(f"{'=' * 10}   Model: {args.model}   {'=' * 10}")
+
     if args.summary:
         exit(0)
 
@@ -191,8 +202,6 @@ if __name__ == "__main__":
     train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch * 2)
     test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
 
-    print("="*50)
-
     tboard_path = args.tboard_root
     model_out_idx = -1
 
@@ -201,7 +210,6 @@ if __name__ == "__main__":
 
         print(f"{'=' * 10}   Distillation   {'=' * 10}")
         print(f"{'=' * 10}   Teacher: {teacher_f_name}   {'=' * 10}")
-        print(f"{'=' * 10}   Student: {args.model}   {'=' * 10}")
 
         try:
             teacher_model = tf.keras.models.load_model(args.teacher)
