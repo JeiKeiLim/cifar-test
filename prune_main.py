@@ -20,7 +20,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", default=10, type=int, help="Epochs.")
     parser.add_argument("--baseline-acc", default=float('nan'), type=float, help="Base Line Accuracy. If both baseline-acc and baseline-loss are not given, model evaluation is performed")
     parser.add_argument("--baseline-loss", default=float('nan'), type=float, help="Base Line Loss. If both baseline-acc and baseline-loss are not given, model evaluation is performed")
-    parser.add_argument("--init-sparsity", default=0.5, type=float, help="Initial sparsity for pruning. If -1 is given, Initial sparsity is computed by sparsity-threshold.")
+    parser.add_argument("--init-sparsity", default=0.5, type=float, help="Initial sparsity for pruning.")
     parser.add_argument("--final-sparsity", default=0.8, type=float, help="Final sparsity for pruning.")
     parser.add_argument("--sparsity-threshold", default=0.05, type=float, help="Sparsity threshold value to find sparsity levels on each layer.")
     parser.add_argument("--reduce-dataset-ratio", default=1.0, type=float, help="Reducing dataset image numbers. (0.0 ~ 1.0)")
@@ -30,7 +30,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", default=7777, type=int, help="Random Seed")
 
     args = parser.parse_args()
-    np.seed(args.seed)
+    np.random.seed(args.seed)
     tf.random.set_seed(args.seed)
 
     sys.path.extend([args.dataset_lib])
@@ -87,21 +87,12 @@ if __name__ == "__main__":
 
     end_step = np.ceil(n_train / args.batch).astype(np.int32) * args.epochs
 
-    if args.init_sparsity < 0:
-        sparsity_calculater = SparsityCallback(None, sparsity_threshold=args.sparsity_threshold)
-        sparsity_calculater.model = model
-        sparsities = sparsity_calculater.compute_sparsity()
-        sparsities = sparsities[np.logical_and(~np.isnan(sparsities), sparsities != 0.0)]
-        init_sparsity = sparsities.mean()
-    else:
-        init_sparsity = args.init_sparsity
-
-    print("Initial Sparsity: {:.5f}".format(init_sparsity))
+    print("Initial Sparsity: {:.5f}".format(args.init_sparsity))
     print("Target Sparsity: {:.5f}".format(args.final_sparsity))
     print("Total Steps: {}".format(end_step))
 
     pruning_params = {
-        'pruning_schedule': tfmot.sparsity.keras.PolynomialDecay(initial_sparsity=init_sparsity,
+        'pruning_schedule': tfmot.sparsity.keras.PolynomialDecay(initial_sparsity=args.init_sparsity,
                                                                  final_sparsity=args.final_sparsity,
                                                                  begin_step=0,
                                                                  end_step=end_step)
