@@ -7,6 +7,7 @@ import datetime
 from tfhelper.tensorboard import run_tensorboard, wait_ctrl_c, SparsityCallback
 import sys
 import pandas as pd
+from tfhelper.pruning import ModelReducer
 
 
 if __name__ == "__main__":
@@ -28,6 +29,7 @@ if __name__ == "__main__":
     parser.add_argument("--tboard-host", default="0.0.0.0", type=str, help="Tensorboard Host Address")
     parser.add_argument("--tboard-port", default=6006, type=int, help="TensorBoard Port Number")
     parser.add_argument("--seed", default=7777, type=int, help="Random Seed")
+    parser.add_argument("--opt", default=7, type=int, help="Reducing Model Size Optimization Level. (0~9)")
 
     args = parser.parse_args()
     np.random.seed(args.seed)
@@ -75,6 +77,7 @@ if __name__ == "__main__":
     print("n_train: {:,}, n_test: {:,}".format(n_train, n_test))
 
     if np.isnan(args.baseline_acc) and np.isnan(args.baseline_loss):
+        model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
         baseline_loss, baseline_acc = model.evaluate(test_set, steps=(n_test//args.batch), verbose=1)
     else:
         baseline_acc = args.baseline_acc if args.baseline_acc > 0 else float('nan')
@@ -133,8 +136,9 @@ if __name__ == "__main__":
 
     out_file = out_file[:ext_idx] if ext_idx > 0 else out_file
 
-    tf.keras.models.save_model(model_for_pruning, f"{out_root}/{out_file}_{model_for_pruning_accuracy:.5f}.h5")
     tf.keras.models.save_model(model_for_export, f"{out_root}/{out_file}_pruned_export_{model_for_pruning_accuracy:.5f}.h5")
+    ModelReducer(f"{out_root}/{out_file}_pruned_export_{model_for_pruning_accuracy:.5f}.h5", opt=args.opt).reduce()
+
 
     ### Prunning END
 
