@@ -4,9 +4,11 @@ import efficientnet.tfkeras as efn
 import argparse
 from tfhelper.tensorboard import get_tf_callbacks, run_tensorboard, wait_ctrl_c
 from tfhelper.gpu import allow_gpu_memory_growth
+from tfhelper.metrics import GeometricF1Score
 from models import resnet, DistillationModel, SelfDistillationModel, microjknet, activations
 import json
 import pandas as pd
+import numpy as np
 
 if __name__ == "__main__":
 
@@ -82,8 +84,13 @@ if __name__ == "__main__":
     parser.add_argument("--dropout", default=0.0, type=float, help="Dropout probability. (MicroJKNet Only)")
     parser.add_argument("--conv", default="conv2d", type=str, help="Convolution Type. (conv2d, sep-conv). (MicroJKNet Only)")
     parser.add_argument("--load-all", default=False, action='store_true', help="Loading All Dataset into memory.")
+    parser.add_argument("--reduce-dataset-ratio", default=1.0, type=float, help="Reducing dataset image numbers. (0.0 ~ 1.0)")
+    parser.add_argument("--seed", default=7777, type=int, help="Random Seed")
 
     args = parser.parse_args()
+
+    np.random.seed(args.seed)
+    tf.random.set_seed(args.seed)
 
     sys.path.extend([args.dataset_lib])
 
@@ -96,6 +103,10 @@ if __name__ == "__main__":
 
     train_annotation = pd.read_csv(dataset_config['train_annotation'])
     test_annotation = pd.read_csv(dataset_config['test_annotation'])
+
+    if args.reduce_dataset_ratio < 1.0:
+        train_annotation = train_annotation.sample(n=int(train_annotation.shape[0] * args.reduce_dataset_ratio), random_state=args.seed).reset_index(drop=True)
+        test_annotation = test_annotation.sample(n=int(test_annotation.shape[0] * args.reduce_dataset_ratio), random_state=args.seed).reset_index(drop=True)
 
     n_classes = len(dataset_config['label_dict'])
 
@@ -205,8 +216,14 @@ if __name__ == "__main__":
     train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch * 2)
     test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
 
+    n_train = train_gen.annotation.shape[0]
+    n_test = test_gen.annotation.shape[0]
+
+    print("n_train: {:,}, n_test: {:,}".format(n_train, n_test))
+
     tboard_path = args.tboard_root
     model_out_idx = -1
+    geometric_f1score = GeometricF1Score(n_classes=n_classes, debug=args.debug)
 
     if args.distill:
         teacher_f_name = args.teacher.split("/")[-1]
@@ -269,7 +286,7 @@ if __name__ == "__main__":
         print(f"{'=' * 10}   Target Model: {args.model}   {'=' * 10}")
 
         n_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
-                        loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+                        loss='sparse_categorical_crossentropy', metrics=['accuracy', geometric_f1score])
         save_metric = 'val_accuracy'
         tboard_path += "/{}_".format(args.model)
 
@@ -278,12 +295,13 @@ if __name__ == "__main__":
 
     tboard_callback = False if args.no_tensorboard_writing else True
 
-    callbacks, tboard_root = get_tf_callbacks(tboard_path, tboard_callback=tboard_callback, tboard_profile_batch=args.tboard_profile,
-                                              confuse_callback=True, test_dataset=test_set, save_metric=save_metric, model_out_idx=model_out_idx,
-                                              label_info=list(dataset_config['label_dict'].values()),
+    y_test = np.array([test_gen.reverse_label[y] for y in test_annotation[dataset_config['class_key']].values])
+    callbacks, tboard_root = get_tf_callbacks(tboard_path, tboard_callback=True, tboard_profile_batch=args.tboard_profile,
+                                              confuse_callback=tboard_callback, test_dataset=test_set, save_metric=save_metric, model_out_idx=model_out_idx,
+                                              label_info=list(dataset_config['label_dict'].values()), y_test=y_test,
                                               modelsaver_callback=True,
                                               earlystop_callback=False,
-                                              sparsity_callback=True, sparsity_threshold=0.05)
+                                              sparsity_callback=tboard_callback, sparsity_threshold=0.05)
 
     if not args.no_tensorboard:
         run_tensorboard(tboard_root, host=args.tboard_host, port=args.tboard_port)
