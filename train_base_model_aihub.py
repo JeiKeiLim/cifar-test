@@ -106,7 +106,9 @@ if __name__ == "__main__":
 
     if args.reduce_dataset_ratio < 1.0:
         train_annotation = train_annotation.sample(n=int(train_annotation.shape[0] * args.reduce_dataset_ratio), random_state=args.seed).reset_index(drop=True)
-        test_annotation = test_annotation.sample(n=int(test_annotation.shape[0] * args.reduce_dataset_ratio), random_state=args.seed).reset_index(drop=True)
+        n_test_by_class = np.ceil(test_annotation.shape[0] * args.reduce_dataset_ratio).astype(np.int)
+        t_annot = [test_annotation.query("{} == '{}'".format(dataset_config['class_key'], dataset_config['label_dict'][str(i)])) for i in range(len(dataset_config['label_dict']))]
+        tst_annotatio = pd.concat([annot.sample(n=min(n_test_by_class, annot.shape[0]), random_state=args.seed) for annot in t_annot])
 
     n_classes = len(dataset_config['label_dict'])
 
