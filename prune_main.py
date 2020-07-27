@@ -79,8 +79,8 @@ if __name__ == "__main__":
                                      preprocess_func=preprocessing.get_preprocess_by_model_name(args.model_name),
                                     seed=args.seed, load_all=args.load_all)
 
-    train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch * 2)
-    test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
+    train_set = train_gen.get_tf_dataset(args.batch)
+    test_set = test_gen.get_tf_dataset(args.batch)
 
     n_train = train_gen.annotation.shape[0]
     n_test = test_gen.annotation.shape[0]
