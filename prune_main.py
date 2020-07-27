@@ -7,6 +7,7 @@ import datetime
 from tfhelper.tensorboard import run_tensorboard, wait_ctrl_c, SparsityCallback
 import sys
 import pandas as pd
+from tfhelper.pruning import ModelReducer
 
 
 if __name__ == "__main__":
@@ -20,23 +21,29 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", default=10, type=int, help="Epochs.")
     parser.add_argument("--baseline-acc", default=float('nan'), type=float, help="Base Line Accuracy. If both baseline-acc and baseline-loss are not given, model evaluation is performed")
     parser.add_argument("--baseline-loss", default=float('nan'), type=float, help="Base Line Loss. If both baseline-acc and baseline-loss are not given, model evaluation is performed")
-    parser.add_argument("--init-sparsity", default=0.5, type=float, help="Initial sparsity for pruning. If -1 is given, Initial sparsity is computed by sparsity-threshold.")
+    parser.add_argument("--init-sparsity", default=0.5, type=float, help="Initial sparsity for pruning.")
     parser.add_argument("--final-sparsity", default=0.8, type=float, help="Final sparsity for pruning.")
     parser.add_argument("--sparsity-threshold", default=0.05, type=float, help="Sparsity threshold value to find sparsity levels on each layer.")
     parser.add_argument("--reduce-dataset-ratio", default=1.0, type=float, help="Reducing dataset image numbers. (0.0 ~ 1.0)")
     parser.add_argument("--tboard-root", default="./export", type=str, help="Tensorboard Log Root. Set this to 'no' will disable writing tensorboards")
     parser.add_argument("--tboard-host", default="0.0.0.0", type=str, help="Tensorboard Host Address")
     parser.add_argument("--tboard-port", default=6006, type=int, help="TensorBoard Port Number")
+    parser.add_argument("--augment", default="none", type=str, help="Augmentation Method. (auto, album, none)")
+    parser.add_argument("--augment-policy", default="imagenet", type=str, help="Augmentation Policy. (imagenet, cifar10, svhn)")
     parser.add_argument("--seed", default=7777, type=int, help="Random Seed")
+    parser.add_argument("--opt", default=7, type=int, help="Reducing Model Size Optimization Level. (0~9)")
+    parser.add_argument("--lr", default=0.001, type=float, help="Learning Rate.")
+    parser.add_argument("--load-all", default=False, action='store_true', help="Loading All Dataset into memory.")
 
     args = parser.parse_args()
-    np.seed(args.seed)
+    np.random.seed(args.seed)
     tf.random.set_seed(args.seed)
 
     sys.path.extend([args.dataset_lib])
 
     from dataset.tfkeras import KProductsTFGenerator
     from dataset.tfkeras import preprocessing
+    from dataset.tfkeras import ImageNetPolicy, CIFAR10Policy, SVHNPolicy
 
     file_name = args.path.split("/")[-1]
     file_root = "/".join(args.path.split("/")[:-1])
@@ -54,20 +61,26 @@ if __name__ == "__main__":
         train_annotation = train_annotation.sample(n=int(train_annotation.shape[0] * args.reduce_dataset_ratio), random_state=args.seed).reset_index(drop=True)
         test_annotation = test_annotation.sample(n=int(test_annotation.shape[0] * args.reduce_dataset_ratio), random_state=args.seed).reset_index(drop=True)
 
+    # Augmentation
+    augmentation_func = None
+    augment_in_dtype = "pil"
+    if args.augment == "auto":
+        augmentation_func = SVHNPolicy() if args.augment_policy == "svhn" else CIFAR10Policy() if args.augment_policy == "cifar10" else ImageNetPolicy()
+
     img_h, img_w = model.input.shape[1:3]
 
     train_gen = KProductsTFGenerator(train_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
                                      shuffle=True, image_size=(img_h, img_w),
-                                     augment_func=None,
+                                     augment_func=augmentation_func, augment_in_dtype=augment_in_dtype,
                                      preprocess_func=preprocessing.get_preprocess_by_model_name(args.model_name),
-                                     seed=args.seed)
+                                     seed=args.seed, load_all=args.load_all)
     test_gen = KProductsTFGenerator(test_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
                                      shuffle=False, image_size=(img_h, img_w),
                                      preprocess_func=preprocessing.get_preprocess_by_model_name(args.model_name),
-                                    seed=args.seed)
+                                    seed=args.seed, load_all=args.load_all)
 
-    train_set = train_gen.get_tf_dataset(args.batch, shuffle=True, reshuffle=True, shuffle_size=args.batch * 2)
-    test_set = test_gen.get_tf_dataset(args.batch, shuffle=False)
+    train_set = train_gen.get_tf_dataset(args.batch)
+    test_set = test_gen.get_tf_dataset(args.batch)
 
     n_train = train_gen.annotation.shape[0]
     n_test = test_gen.annotation.shape[0]
@@ -75,6 +88,7 @@ if __name__ == "__main__":
     print("n_train: {:,}, n_test: {:,}".format(n_train, n_test))
 
     if np.isnan(args.baseline_acc) and np.isnan(args.baseline_loss):
+        model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
         baseline_loss, baseline_acc = model.evaluate(test_set, steps=(n_test//args.batch), verbose=1)
     else:
         baseline_acc = args.baseline_acc if args.baseline_acc > 0 else float('nan')
@@ -87,28 +101,19 @@ if __name__ == "__main__":
 
     end_step = np.ceil(n_train / args.batch).astype(np.int32) * args.epochs
 
-    if args.init_sparsity < 0:
-        sparsity_calculater = SparsityCallback(None, sparsity_threshold=args.sparsity_threshold)
-        sparsity_calculater.model = model
-        sparsities = sparsity_calculater.compute_sparsity()
-        sparsities = sparsities[np.logical_and(~np.isnan(sparsities), sparsities != 0.0)]
-        init_sparsity = sparsities.mean()
-    else:
-        init_sparsity = args.init_sparsity
-
-    print("Initial Sparsity: {:.5f}".format(init_sparsity))
+    print("Initial Sparsity: {:.5f}".format(args.init_sparsity))
     print("Target Sparsity: {:.5f}".format(args.final_sparsity))
     print("Total Steps: {}".format(end_step))
 
     pruning_params = {
-        'pruning_schedule': tfmot.sparsity.keras.PolynomialDecay(initial_sparsity=init_sparsity,
+        'pruning_schedule': tfmot.sparsity.keras.PolynomialDecay(initial_sparsity=args.init_sparsity,
                                                                  final_sparsity=args.final_sparsity,
                                                                  begin_step=0,
                                                                  end_step=end_step)
     }
 
     model_for_pruning = prune_low_magnitude(model, **pruning_params)
-    model_for_pruning.compile(optimizer='adam',
+    model_for_pruning.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
                               loss=tf.keras.losses.SparseCategoricalCrossentropy(),
                               metrics=['accuracy'])
 
@@ -142,8 +147,8 @@ if __name__ == "__main__":
 
     out_file = out_file[:ext_idx] if ext_idx > 0 else out_file
 
-    tf.keras.models.save_model(model_for_pruning, f"{out_root}/{out_file}_{model_for_pruning_accuracy:.5f}.h5")
     tf.keras.models.save_model(model_for_export, f"{out_root}/{out_file}_pruned_export_{model_for_pruning_accuracy:.5f}.h5")
+    ModelReducer(f"{out_root}/{out_file}_pruned_export_{model_for_pruning_accuracy:.5f}.h5", opt=args.opt).reduce()
 
     ### Prunning END
 
