@@ -9,6 +9,7 @@ import datetime
 from tfhelper.tensorboard import run_tensorboard, wait_ctrl_c, get_tf_callbacks
 import sys
 import pandas as pd
+import efficientnet.tfkeras
 
 
 if __name__ == "__main__":

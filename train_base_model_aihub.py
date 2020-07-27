@@ -98,7 +98,7 @@ if __name__ == "__main__":
     from dataset.tfkeras import preprocessing
     from dataset.tfkeras import ImageNetPolicy, CIFAR10Policy, SVHNPolicy
 
-    with open(args.dataset_conf, 'r') as f:
+    with open(args.dataset_conf, 'r', encoding='UTF8') as f:
         dataset_config = json.load(f)
 
     train_annotation = pd.read_csv(dataset_config['train_annotation'])
@@ -185,7 +185,6 @@ if __name__ == "__main__":
 
         output = tf.keras.layers.GlobalAveragePooling2D(dtype=dtype)(conv2d)
         output = tf.keras.layers.Softmax(name="out_dense")(output)
-
         n_model = tf.keras.models.Model(model.input, output)
     else:
         n_model = model
