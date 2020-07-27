@@ -51,6 +51,7 @@ if __name__ == "__main__":
     parser.add_argument("--model", default="resnet18", type=str, help="Model Name. Supported Models: ({}).".format(
         ", ".join(list(model_dict.keys()))))
     parser.add_argument("--unfreeze", default=0, type=int, help="A number unfreeze layer. 0: Freeze all. -1: Unfreeze all.")
+    parser.add_argument("--top-layer", default="gap", type=str, help="Top Layer Type(gap: 1x1conv->GAP, dense: Flatten->Fully Connected")
     parser.add_argument("--lr", default=0.001, type=float, help="Learning Rate.")
     parser.add_argument("--batch", default=8, type=int, help="Batch Size.")
     parser.add_argument("--epochs", default=1000, type=int, help="Epochs.")
@@ -104,13 +105,15 @@ if __name__ == "__main__":
     train_annotation = pd.read_csv(dataset_config['train_annotation'])
     test_annotation = pd.read_csv(dataset_config['test_annotation'])
 
+    n_classes = len(dataset_config['label_dict'])
+
     if args.reduce_dataset_ratio < 1.0:
         train_annotation = train_annotation.sample(n=int(train_annotation.shape[0] * args.reduce_dataset_ratio), random_state=args.seed).reset_index(drop=True)
-        n_test_by_class = np.ceil(test_annotation.shape[0] * args.reduce_dataset_ratio).astype(np.int)
-        t_annot = [test_annotation.query("{} == '{}'".format(dataset_config['class_key'], dataset_config['label_dict'][str(i)])) for i in range(len(dataset_config['label_dict']))]
-        tst_annotatio = pd.concat([annot.sample(n=min(n_test_by_class, annot.shape[0]), random_state=args.seed) for annot in t_annot])
+        n_test_by_class = np.ceil(test_annotation.shape[0] * args.reduce_dataset_ratio / n_classes).astype(np.int)
 
-    n_classes = len(dataset_config['label_dict'])
+        t_annot = [test_annotation.query("{} == '{}'".format(dataset_config['class_key'], dataset_config['label_dict'][str(i)])) for i in range(len(dataset_config['label_dict']))]
+        test_annotation = pd.concat([annot.sample(n=min(max(n_test_by_class, 1), annot.shape[0]), random_state=args.seed)
+                                   for annot in t_annot])
 
     # Setting the model
     TargetModel = None
@@ -179,12 +182,18 @@ if __name__ == "__main__":
 
     # Append Custom Top Layer if needed.
     if append_top_layer:
-        conv2d = tf.keras.layers.Conv2D(n_classes, 1, padding='SAME', activation=None, dtype=dtype)(model.output)
-        conv2d = tf.keras.layers.BatchNormalization(dtype=dtype)(conv2d)
-        conv2d = tf.keras.layers.ReLU(name="final_block_activation", dtype=dtype)(conv2d)
+        if args.top_layer == "gap":
+            conv2d = tf.keras.layers.Conv2D(n_classes, 1, padding='SAME', activation=None, dtype=dtype)(model.output)
+            conv2d = tf.keras.layers.BatchNormalization(dtype=dtype)(conv2d)
+            conv2d = tf.keras.layers.ReLU(name="final_block_activation", dtype=dtype)(conv2d)
 
-        output = tf.keras.layers.GlobalAveragePooling2D(dtype=dtype)(conv2d)
-        output = tf.keras.layers.Softmax(name="out_dense")(output)
+            output = tf.keras.layers.GlobalAveragePooling2D(dtype=dtype)(conv2d)
+            output = tf.keras.layers.Softmax(name="out_dense")(output)
+        else:
+            output = tf.keras.layers.Flatten()(model.output)
+            output = tf.keras.layers.Dense(n_classes, name="final_block_activation", dtype=dtype)(output)
+            output = tf.keras.layers.Softmax(name="out_dense")(output)
+
         n_model = tf.keras.models.Model(model.input, output)
     else:
         n_model = model
