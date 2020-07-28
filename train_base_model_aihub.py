@@ -89,6 +89,7 @@ if __name__ == "__main__":
     parser.add_argument("--conv", default="conv2d", type=str, help="Convolution Type. (conv2d, sep-conv). (MicroJKNet Only)")
     parser.add_argument("--load-all", default=False, action='store_true', help="Loading All Dataset into memory.")
     parser.add_argument("--reduce-dataset-ratio", default=1.0, type=float, help="Reducing dataset image numbers. (0.0 ~ 1.0)")
+    parser.add_argument("--data-format", default="channels_last", type=str, help="Data Format (channels_last, channels_first). ((batch, height, width, channel), (batch, channel, height, width))")
     parser.add_argument("--seed", default=7777, type=int, help="Random Seed")
 
     args = parser.parse_args()
@@ -157,6 +158,7 @@ if __name__ == "__main__":
             kwargs['Activation'] = activations.Hswish if args.activation == 'hswish' else activations.Swish if args.activation == 'swish' else tf.keras.layers.ReLU
             kwargs['p_drop'] = args.dropout
             kwargs['Conv'] = tf.keras.layers.SeparableConv2D if args.conv == "sep-conv" else tf.keras.layers.Conv2D
+            kwargs['data_format'] = args.data_format
             args.model += f"({args.growth_rate},{args.model_depth},{args.model_in_depth},{args.expansion},{args.compression_rate},{args.activation})"
             kwargs.pop("include_top")
             kwargs.pop("weights")
@@ -168,6 +170,7 @@ if __name__ == "__main__":
             kwargs['n_classes'] = n_classes
             kwargs['Activation'] = activations.Hswish if args.activation == 'hswish' else activations.Swish if args.activation == 'swish' else tf.keras.layers.ReLU
             kwargs['hidden_ratio'] = args.logistic_hidden_ratio
+            kwargs['data_format'] = args.data_format
             kwargs.pop("include_top")
             kwargs.pop("weights")
             append_top_layer = False
@@ -229,15 +232,16 @@ if __name__ == "__main__":
         augmentation_func = SVHNPolicy() if args.augment_policy == "svhn" else CIFAR10Policy() if args.augment_policy == "cifar10" else ImageNetPolicy()
 
     # Dataset Generator
+    preprocess_func = preprocessing.get_preprocess_by_model_name(args.model)
     train_gen = KProductsTFGenerator(train_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
                                      shuffle=True, image_size=(args.img_h, args.img_w),
                                      augment_func=augmentation_func, augment_in_dtype=augment_in_dtype,
-                                     preprocess_func=preprocessing.get_preprocess_by_model_name(args.model),
-                                     load_all=args.load_all)
+                                     preprocess_func=preprocess_func,
+                                     load_all=args.load_all, data_format=args.data_format)
     test_gen = KProductsTFGenerator(test_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
                                     shuffle=False, image_size=(args.img_h, args.img_w),
-                                    preprocess_func=preprocessing.get_preprocess_by_model_name(args.model),
-                                    load_all=args.load_all)
+                                    preprocess_func=preprocess_func,
+                                    load_all=args.load_all, data_format=args.data_format)
 
     train_set = train_gen.get_tf_dataset(args.batch)
     test_set = test_gen.get_tf_dataset(args.batch)

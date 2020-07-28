@@ -45,21 +45,23 @@ class BottleNeckBlock:
 class DenseBottleNeck:
     def __init__(self, expansion=4, growth_rate=12, kernel_size=(3, 3),
                  p_drop=0.0, padding='SAME', use_bias=False, Activation=tf.keras.layers.ReLU,
-                 Conv2D=tf.keras.layers.Conv2D,
+                 Conv2D=tf.keras.layers.Conv2D, data_format='channels_last',
                  name="dense_bottle", dtype=tf.float32):
 
-        self.bn1 = tf.keras.layers.BatchNormalization(name=f"{name}_bn1", dtype=dtype)
+        self.bn1 = tf.keras.layers.BatchNormalization(name=f"{name}_bn1", dtype=dtype,
+                                                      axis=3 if data_format == "channels_last" else 1)
         self.conv1 = tf.keras.layers.Conv2D(expansion * growth_rate, (1, 1), strides=(1, 1), dtype=dtype,
-                                            padding=padding, use_bias=use_bias,
+                                            padding=padding, use_bias=use_bias, data_format=data_format,
                                             name=f"{name}_conv1")
 
-        self.bn2 = tf.keras.layers.BatchNormalization(name=f"{name}_bn2", dtype=dtype)
+        self.bn2 = tf.keras.layers.BatchNormalization(name=f"{name}_bn2", dtype=dtype,
+                                                      axis=3 if data_format == "channels_last" else 1)
         self.conv2 = Conv2D(growth_rate, kernel_size, strides=(1, 1), dtype=dtype,
-                                            padding=padding, use_bias=use_bias,
+                                            padding=padding, use_bias=use_bias, data_format=data_format,
                                             name=f"{name}_conv2")
         self.dropout = tf.keras.layers.Dropout(p_drop, name=f"{name}_dropout") if p_drop > 0.0 else None
         self.activation = Activation(name=f"{name}_act", dtype=dtype)
-        self.concat = tf.keras.layers.Concatenate(name=f"{name}_concat")
+        self.concat = tf.keras.layers.Concatenate(name=f"{name}_concat", axis=-1 if data_format == "channels_last" else 1)
 
     def __call__(self, layer):
         x = self.bn1(layer)
@@ -81,15 +83,16 @@ class DenseBottleNeck:
 class DenseBasic:
     def __init__(self, growth_rate=12, kernel_size=(3, 3), p_drop=0.0, padding='SAME',
                  use_bias=False, Activation=tf.keras.layers.ReLU, Conv2D=tf.keras.layers.Conv2D,
-                 name="dense_basic", dtype=tf.float32, **kwargs):
+                 name="dense_basic", dtype=tf.float32, data_format='channels_last'):
 
-        self.bn1 = tf.keras.layers.BatchNormalization(name=f"{name}_bn1", dtype=dtype)
+        self.bn1 = tf.keras.layers.BatchNormalization(name=f"{name}_bn1", dtype=dtype,
+                                                      axis=3 if data_format == "channels_last" else 1)
         self.conv1 = Conv2D(growth_rate, kernel_size, strides=(1, 1), dtype=dtype,
-                                            padding=padding, use_bias=use_bias,
+                                            padding=padding, use_bias=use_bias, data_format=data_format,
                                             name=f"{name}_conv1")
         self.activation = Activation(name=f"{name}_act", dtype=dtype)
         self.dropout = tf.keras.layers.Dropout(p_drop, name=f"{name}_dropout") if p_drop > 0.0 else None
-        self.concat = tf.keras.layers.Concatenate(name=f"{name}_concat")
+        self.concat = tf.keras.layers.Concatenate(name=f"{name}_concat", axis=-1 if data_format == "channels_last" else 1)
 
     def __call__(self, layer):
         x = self.bn1(layer)
@@ -104,13 +107,15 @@ class DenseBasic:
 
 class DenseReduce:
     def __init__(self, n_filter, downsample_kernel_size=(3, 3), downsample_strides=(2, 2), padding='SAME', use_bias=False,
-                 Activation=tf.keras.layers.ReLU, name="dense_reduce", dtype=tf.float32):
-        self.bn1 = tf.keras.layers.BatchNormalization(name=f"{name}_bn1", dtype=dtype)
+                 Activation=tf.keras.layers.ReLU, name="dense_reduce", dtype=tf.float32, data_format='channels_last'):
+        self.bn1 = tf.keras.layers.BatchNormalization(name=f"{name}_bn1", dtype=dtype,
+                                                      axis=3 if data_format == "channels_last" else 1)
         self.conv1 = tf.keras.layers.Conv2D(n_filter, (1, 1), strides=(1, 1), dtype=dtype,
-                                            padding=padding, use_bias=use_bias,
+                                            padding=padding, use_bias=use_bias, data_format=data_format,
                                             name=f"{name}_conv1")
         self.activation = Activation(name=f"{name}_act", dtype=dtype)
         self.reduce = tf.keras.layers.AveragePooling2D(downsample_kernel_size, downsample_strides, padding=padding,
+                                                       data_format = data_format,
                                                        name=f"{name}_reduce")
 
     def __call__(self, layer):
@@ -160,15 +165,19 @@ class ResNetBlock:
 
 class SeparableConvBN:
     def __init__(self, n_filter, kernel_size, strides=(1, 1), padding='SAME', use_bias=True,
-                 activation=tf.keras.layers.ReLU, name="sep_conv_bn", dtype=tf.float32):
+                 activation=tf.keras.layers.ReLU, name="sep_conv_bn", dtype=tf.float32, data_format="channels_last"):
         self.conv1 = tf.keras.layers.DepthwiseConv2D(kernel_size, strides=strides, padding=padding, use_bias=use_bias,
+                                                     data_format=data_format,
                                                      activation=None, name=f"{name}_conv1", dtype=dtype)
-        self.bn1 = tf.keras.layers.BatchNormalization(name=f"{name}_bn1", dtype=dtype)
+        self.bn1 = tf.keras.layers.BatchNormalization(name=f"{name}_bn1", dtype=dtype,
+                                                      axis=3 if data_format == "channels_last" else 1)
         self.activation = activation(name=f"{name}_act", dtype=dtype)
 
         self.conv2 = tf.keras.layers.Conv2D(n_filter, (1, 1), strides=(1, 1), padding=padding, use_bias=use_bias,
+                                            data_format=data_format,
                                             activation=None, name=f"{name}_conv2", dtype=dtype)
-        self.bn2 = tf.keras.layers.BatchNormalization(name=f"{name}_bn2", dtype=dtype)
+        self.bn2 = tf.keras.layers.BatchNormalization(name=f"{name}_bn2", dtype=dtype,
+                                                      axis=3 if data_format == "channels_last" else 1)
 
     def __call__(self, layer):
         x = self.conv1(layer)
