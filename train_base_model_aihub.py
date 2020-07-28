@@ -9,6 +9,7 @@ from models import resnet, DistillationModel, SelfDistillationModel, microjknet,
 import json
 import pandas as pd
 import numpy as np
+from dataset import augment
 
 if __name__ == "__main__":
 
@@ -101,7 +102,6 @@ if __name__ == "__main__":
 
     from dataset.tfkeras import KProductsTFGenerator
     from dataset.tfkeras import preprocessing
-    from dataset.tfkeras import ImageNetPolicy, CIFAR10Policy, SVHNPolicy
 
     with open(args.dataset_conf, 'r', encoding='UTF8') as f:
         dataset_config = json.load(f)
@@ -229,7 +229,9 @@ if __name__ == "__main__":
     augmentation_func = None
     augment_in_dtype = "pil"
     if args.augment == "auto":
-        augmentation_func = SVHNPolicy() if args.augment_policy == "svhn" else CIFAR10Policy() if args.augment_policy == "cifar10" else ImageNetPolicy()
+        augmentation_func = augment.SVHNPolicy() if args.augment_policy == "svhn" else augment.CIFAR10Policy() if args.augment_policy == "cifar10" else augment.ImageNetPolicy()
+    elif args.augment == "album":
+        augmentation_func = augment.DeepInAirPolicy()
 
     # Dataset Generator
     preprocess_func = preprocessing.get_preprocess_by_model_name(args.model)
