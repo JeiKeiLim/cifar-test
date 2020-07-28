@@ -5,7 +5,7 @@ import argparse
 from tfhelper.tensorboard import get_tf_callbacks, run_tensorboard, wait_ctrl_c
 from tfhelper.gpu import allow_gpu_memory_growth
 from tfhelper.metrics import GeometricF1Score
-from models import resnet, DistillationModel, SelfDistillationModel, microjknet, activations
+from models import resnet, DistillationModel, SelfDistillationModel, microjknet, activations, logistic
 import json
 import pandas as pd
 import numpy as np
@@ -42,7 +42,8 @@ if __name__ == "__main__":
         "xception": tf.keras.applications.Xception,
         "resnet18": resnet.ResNet18,
         "resnet10": resnet.ResNet10,
-        "microjknet": microjknet.MicroJKNet
+        "microjknet": microjknet.MicroJKNet,
+        "logistic": logistic.MiniModel
     }
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -72,6 +73,7 @@ if __name__ == "__main__":
     parser.add_argument("--tboard-port", default=6006, type=int, help="TensorBoard Port Number")
     parser.add_argument("--tboard-profile", default=0, type=int, help="Tensorboard Profiling (0: No Profile)")
     parser.add_argument("--tboard-update-freq", default="epoch", type=str, help="Tensorboard Update Frequency. (epoch, batch)")
+    parser.add_argument("--logistic-hidden-ratio", default=0.5, type=float, help="Logistic Model Hidden Neuron Ratio.")
     parser.add_argument("--debug", default=False, action='store_true', help="Debugging Mode")
     parser.add_argument("--float16", default=False, action='store_true', help="Use Mixed Precision with float16")
     parser.add_argument("--float16-dtype", default='mixed_float16', type=str, help="Mixed float16 precision type.")
@@ -139,6 +141,9 @@ if __name__ == "__main__":
             kwargs['float16'] = args.float16
             kwargs['float16_dtype'] = args.float16_dtype
             kwargs['init_channel'] = args.resnet_init_channel
+            kwargs['n_classes'] = n_classes
+            kwargs['include_top'] = True
+            append_top_layer = False
         # Custom MicroJKNet Model Parameter
         elif issubclass(TargetModel, microjknet.MicroJKNet):
             kwargs['float16'] = args.float16
@@ -153,6 +158,16 @@ if __name__ == "__main__":
             kwargs['p_drop'] = args.dropout
             kwargs['Conv'] = tf.keras.layers.SeparableConv2D if args.conv == "sep-conv" else tf.keras.layers.Conv2D
             args.model += f"({args.growth_rate},{args.model_depth},{args.model_in_depth},{args.expansion},{args.compression_rate},{args.activation})"
+            kwargs.pop("include_top")
+            kwargs.pop("weights")
+            append_top_layer = False
+        elif issubclass(TargetModel, logistic.MiniModel):
+            # Custom Logistic Regression Model Parameter
+            kwargs['float16'] = args.float16
+            kwargs['float16_dtype'] = args.float16_dtype
+            kwargs['n_classes'] = n_classes
+            kwargs['Activation'] = activations.Hswish if args.activation == 'hswish' else activations.Swish if args.activation == 'swish' else tf.keras.layers.ReLU
+            kwargs['hidden_ratio'] = args.logistic_hidden_ratio
             kwargs.pop("include_top")
             kwargs.pop("weights")
             append_top_layer = False
