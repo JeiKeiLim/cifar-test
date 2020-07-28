@@ -255,7 +255,8 @@ if __name__ == "__main__":
 
     tboard_path = args.tboard_root
     model_out_idx = -1
-    geometric_f1score = F1ScoreMetric(n_classes=n_classes, debug=args.debug, f1_method='macro')
+    geometric_f1score = F1ScoreMetric(n_classes=n_classes, debug=args.debug, name="geometric_f1score", f1_method='geometric')
+    macro_f1score = F1ScoreMetric(n_classes=n_classes, debug=args.debug, name="macro_f1score", f1_method='macro')
 
     if args.distill:
         teacher_f_name = args.teacher.split("/")[-1]
@@ -318,7 +319,7 @@ if __name__ == "__main__":
         print(f"{'=' * 10}   Target Model: {args.model}   {'=' * 10}")
 
         n_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
-                        loss='sparse_categorical_crossentropy', metrics=['accuracy', geometric_f1score])
+                        loss='sparse_categorical_crossentropy', metrics=['accuracy', geometric_f1score, macro_f1score])
         save_metric = 'val_accuracy'
         tboard_path += "/{}_".format(args.model)
 
