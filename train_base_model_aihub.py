@@ -91,10 +91,10 @@ if __name__ == "__main__":
     parser.add_argument("--reduce-dataset-ratio", default=1.0, type=float, help="Reducing dataset image numbers. (0.0 ~ 1.0)")
     parser.add_argument("--data-format", default="channels_last", type=str, help="Data Format (channels_last, channels_first). ((batch, height, width, channel), (batch, channel, height, width))")
     parser.add_argument("--seed", default=7777, type=int, help="Random Seed")
-    parser.add_argument("--prefetch", default=True, desc="prefetch", action='store_true', help="Use prefetch option for dataset")
-    parser.add_argument("--use-cache", default=True, desc="use_cache", action='store_true', help="Use prefetch option for dataset")
-    parser.add_argument("--no-prefetch", desc="prefetch", action='store_false', help="No use prefetch option for dataset")
-    parser.add_argument("--no-cache", desc="use_cache", action='store_false', help="No use cache option for dataset")
+    parser.add_argument("--prefetch", default=True, dest="prefetch", action='store_true', help="Use prefetch option for dataset")
+    parser.add_argument("--use-cache", default=True, dest="use_cache", action='store_true', help="Use prefetch option for dataset")
+    parser.add_argument("--no-prefetch", dest="prefetch", action='store_false', help="No use prefetch option for dataset")
+    parser.add_argument("--no-cache", dest="use_cache", action='store_false', help="No use cache option for dataset")
 
     args = parser.parse_args()
 
