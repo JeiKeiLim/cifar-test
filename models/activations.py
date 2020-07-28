@@ -11,7 +11,7 @@ class Hswish:
 
 
 class Swish:
-    def __init__(self, name=None, dtype=tf.float32):
+    def __init__(self, name="swish", dtype=tf.float32):
         self.name = name
         self.dtype = dtype
 
