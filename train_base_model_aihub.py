@@ -91,6 +91,10 @@ if __name__ == "__main__":
     parser.add_argument("--reduce-dataset-ratio", default=1.0, type=float, help="Reducing dataset image numbers. (0.0 ~ 1.0)")
     parser.add_argument("--data-format", default="channels_last", type=str, help="Data Format (channels_last, channels_first). ((batch, height, width, channel), (batch, channel, height, width))")
     parser.add_argument("--seed", default=7777, type=int, help="Random Seed")
+    parser.add_argument("--prefetch", default=True, desc="prefetch", action='store_true', help="Use prefetch option for dataset")
+    parser.add_argument("--use-cache", default=True, desc="use_cache", action='store_true', help="Use prefetch option for dataset")
+    parser.add_argument("--no-prefetch", desc="prefetch", action='store_false', help="No use prefetch option for dataset")
+    parser.add_argument("--no-cache", desc="use_cache", action='store_false', help="No use cache option for dataset")
 
     args = parser.parse_args()
 
@@ -239,11 +243,11 @@ if __name__ == "__main__":
     train_gen = KProductsTFGenerator(train_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
                                      shuffle=True, image_size=(args.img_h, args.img_w),
                                      augment_func=augmentation_func, augment_in_dtype=augment_in_dtype,
-                                     preprocess_func=preprocess_func,
+                                     preprocess_func=preprocess_func, prefetch=args.prefetch, use_cache=args.use_cache,
                                      load_all=args.load_all, data_format=args.data_format)
     test_gen = KProductsTFGenerator(test_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
-                                    shuffle=False, image_size=(args.img_h, args.img_w),
-                                    preprocess_func=preprocess_func,
+                                    shuffle=False, image_size=(args.img_h, args.img_w), prefetch=args.prefetch, use_cache=args.use_cache,
+                                    preprocess_func=preprocess_func, augment_in_dtype=augment_in_dtype,
                                     load_all=args.load_all, data_format=args.data_format)
 
     train_set = train_gen.get_tf_dataset(args.batch)
