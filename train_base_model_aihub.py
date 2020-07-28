@@ -337,7 +337,7 @@ if __name__ == "__main__":
     callbacks, tboard_root = get_tf_callbacks(tboard_path, tboard_callback=True, tboard_profile_batch=args.tboard_profile, tboard_update_freq=args.tboard_update_freq,
                                               confuse_callback=tboard_callback, test_dataset=test_set, save_metric=save_metric, model_out_idx=model_out_idx,
                                               label_info=list(dataset_config['label_dict'].values()), y_test=y_test,
-                                              modelsaver_callback=True,
+                                              modelsaver_callback=True, save_file_name=args.model,
                                               earlystop_callback=False,
                                               sparsity_callback=tboard_callback, sparsity_threshold=0.05)
 
