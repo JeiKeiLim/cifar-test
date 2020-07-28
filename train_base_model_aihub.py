@@ -4,7 +4,7 @@ import efficientnet.tfkeras as efn
 import argparse
 from tfhelper.tensorboard import get_tf_callbacks, run_tensorboard, wait_ctrl_c
 from tfhelper.gpu import allow_gpu_memory_growth
-from tfhelper.metrics import GeometricF1Score
+from tfhelper.metrics import F1ScoreMetric
 from models import resnet, DistillationModel, SelfDistillationModel, microjknet, activations, logistic
 import json
 import pandas as pd
@@ -253,7 +253,7 @@ if __name__ == "__main__":
 
     tboard_path = args.tboard_root
     model_out_idx = -1
-    geometric_f1score = GeometricF1Score(n_classes=n_classes, debug=args.debug)
+    geometric_f1score = F1ScoreMetric(n_classes=n_classes, debug=args.debug, f1_method='macro')
 
     if args.distill:
         teacher_f_name = args.teacher.split("/")[-1]
