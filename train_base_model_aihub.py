@@ -57,8 +57,8 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", default=1000, type=int, help="Epochs.")
     parser.add_argument("--weights", default="", type=str, help="Weight path to load. If not given, training begins from scratch with imagenet base weights")
     parser.add_argument("--summary", dest="summary", action="store_true", default=False, help="Display a summary of the model and exit")
-    parser.add_argument("--img_w", default=224, type=int, help="Image Width")
-    parser.add_argument("--img_h", default=224, type=int, help="Image Height")
+    parser.add_argument("--img_w", default=64, type=int, help="Image Width")
+    parser.add_argument("--img_h", default=48, type=int, help="Image Height")
     parser.add_argument("--resnet-init-channel", default=64, type=int, help="ResNet Initial Channel Number")
     parser.add_argument("--distill", default=False, action='store_true', help="Perform Distillation")
     parser.add_argument("--teacher", default="", type=str, help="Teacher Model Path")
@@ -71,6 +71,7 @@ if __name__ == "__main__":
     parser.add_argument("--tboard-host", default="0.0.0.0", type=str, help="Tensorboard Host Address")
     parser.add_argument("--tboard-port", default=6006, type=int, help="TensorBoard Port Number")
     parser.add_argument("--tboard-profile", default=0, type=int, help="Tensorboard Profiling (0: No Profile)")
+    parser.add_argument("--tboard-update-freq", default="epoch", type=str, help="Tensorboard Update Frequency. (epoch, batch)")
     parser.add_argument("--debug", default=False, action='store_true', help="Debugging Mode")
     parser.add_argument("--float16", default=False, action='store_true', help="Use Mixed Precision with float16")
     parser.add_argument("--float16-dtype", default='mixed_float16', type=str, help="Mixed float16 precision type.")
@@ -306,7 +307,7 @@ if __name__ == "__main__":
     tboard_callback = False if args.no_tensorboard_writing else True
 
     y_test = np.array([test_gen.reverse_label[y] for y in test_annotation[dataset_config['class_key']].values])
-    callbacks, tboard_root = get_tf_callbacks(tboard_path, tboard_callback=True, tboard_profile_batch=args.tboard_profile,
+    callbacks, tboard_root = get_tf_callbacks(tboard_path, tboard_callback=True, tboard_profile_batch=args.tboard_profile, tboard_update_freq=args.tboard_update_freq,
                                               confuse_callback=tboard_callback, test_dataset=test_set, save_metric=save_metric, model_out_idx=model_out_idx,
                                               label_info=list(dataset_config['label_dict'].values()), y_test=y_test,
                                               modelsaver_callback=True,
