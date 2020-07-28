@@ -9,7 +9,6 @@ from models import resnet, DistillationModel, SelfDistillationModel, microjknet,
 import json
 import pandas as pd
 import numpy as np
-from dataset import augment
 
 if __name__ == "__main__":
 
@@ -102,6 +101,7 @@ if __name__ == "__main__":
 
     from dataset.tfkeras import KProductsTFGenerator
     from dataset.tfkeras import preprocessing
+    from dataset import augment
 
     with open(args.dataset_conf, 'r', encoding='UTF8') as f:
         dataset_config = json.load(f)
