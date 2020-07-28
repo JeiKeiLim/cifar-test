@@ -232,6 +232,7 @@ if __name__ == "__main__":
         augmentation_func = augment.SVHNPolicy() if args.augment_policy == "svhn" else augment.CIFAR10Policy() if args.augment_policy == "cifar10" else augment.ImageNetPolicy()
     elif args.augment == "album":
         augmentation_func = augment.DeepInAirPolicy()
+        augment_in_dtype = "numpy"
 
     # Dataset Generator
     preprocess_func = preprocessing.get_preprocess_by_model_name(args.model)
