@@ -5,7 +5,7 @@ import argparse
 from tfhelper.tensorboard import get_tf_callbacks, run_tensorboard, wait_ctrl_c
 from tfhelper.gpu import allow_gpu_memory_growth
 from tfhelper.metrics import F1ScoreMetric
-from models import resnet, DistillationModel, SelfDistillationModel, microjknet, activations, logistic
+from models import resnet, DistillationModel, SelfDistillationModel, microjknet, activations, logistic, ensemble_model
 import json
 import pandas as pd
 import numpy as np
@@ -43,7 +43,8 @@ if __name__ == "__main__":
         "resnet18": resnet.ResNet18,
         "resnet10": resnet.ResNet10,
         "microjknet": microjknet.MicroJKNet,
-        "logistic": logistic.MiniModel
+        "logistic": logistic.MiniModel,
+        "ensemble": ensemble_model.EnsembleModel
     }
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -95,6 +96,8 @@ if __name__ == "__main__":
     parser.add_argument("--use-cache", default=True, dest="use_cache", action='store_true', help="Use prefetch option for dataset")
     parser.add_argument("--no-prefetch", dest="prefetch", action='store_false', help="No use prefetch option for dataset")
     parser.add_argument("--no-cache", dest="use_cache", action='store_false', help="No use cache option for dataset")
+    parser.add_argument("--test-only", default=False, action='store_true', help="Model test only")
+    parser.add_argument("-en", "--ensemble-models", nargs="*")
 
     args = parser.parse_args()
 
@@ -178,11 +181,18 @@ if __name__ == "__main__":
             kwargs.pop("include_top")
             kwargs.pop("weights")
             append_top_layer = False
+        elif issubclass(TargetModel, ensemble_model.EnsembleModel):
+            ensemble_models = [tf.keras.models.load_model(path) for path in args.ensemble_models]
+            kwargs['models'] = ensemble_models
+            kwargs.pop("include_top")
+            kwargs.pop("weights")
+            append_top_layer = False
     except:
         pass
 
     # Build Model
-    model = TargetModel(**kwargs)
+    target_model = TargetModel(**kwargs)
+    model = target_model
 
     if type(model) != tf.keras.models.Model:
         # Custom Model require to call build_model()
@@ -246,7 +256,7 @@ if __name__ == "__main__":
                                      preprocess_func=preprocess_func, prefetch=args.prefetch, use_cache=args.use_cache,
                                      load_all=args.load_all, data_format=args.data_format)
     test_gen = KProductsTFGenerator(test_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
-                                    shuffle=False, image_size=(args.img_h, args.img_w), prefetch=args.prefetch, use_cache=args.use_cache,
+                                    shuffle=False, image_size=(args.img_h, args.img_w), prefetch=args.prefetch, use_cache=True,
                                     preprocess_func=preprocess_func, augment_in_dtype=augment_in_dtype,
                                     load_all=args.load_all, data_format=args.data_format)
 
@@ -330,6 +340,15 @@ if __name__ == "__main__":
 
     if args.weights != "":
         n_model.load_weights(args.weights)
+
+    if args.test_only:
+        if args.model.startswith("ensemble"):
+            target_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr), loss='sparse_categorical_crossentropy')
+            target_model.evaluate(test_set, eval_ensemble=True)
+            target_model.evaluate(test_set, eval_ensemble=False)
+        else:
+            n_model.evaluate(test_set)
+        exit()
 
     tboard_callback = False if args.no_tensorboard_writing else True
 

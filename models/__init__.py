@@ -5,3 +5,4 @@ from .self_distillation_model import SelfDistillationModel
 from .microjknet import MicroJKNet
 from .logistic import MiniModel
 from .activations import *
+from .ensemble_model import EnsembleModel
