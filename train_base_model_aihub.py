@@ -138,11 +138,11 @@ if __name__ == "__main__":
         for i, model_name in enumerate(model_dict.keys()):
             print("{:02d}: {}".format(i+1, model_name))
         exit(0)
-    if args.multi_gpu:
-        strategy = tf.distribute.MirroredStrategy()
-        print("Device number: {}".format(strategy.num_replicas_in_sync))
-    else:
-        allow_gpu_memory_growth()
+
+    devices = None if args.multi_gpu else ['/gpu:0']
+    strategy = tf.distribute.MirroredStrategy(devices=devices)
+
+    print("Device number: {}".format(strategy.num_replicas_in_sync))
 
     # Setting model parameters
     kwargs = {'input_shape': (args.img_h, args.img_w, 3), 'include_top': False, 'weights': 'imagenet'}
@@ -195,45 +195,46 @@ if __name__ == "__main__":
         pass
 
     # Build Model
-    target_model = TargetModel(**kwargs)
-    model = target_model
+    with strategy.scope():
+        target_model = TargetModel(**kwargs)
+        model = target_model
 
-    if type(model) != tf.keras.models.Model:
-        # Custom Model require to call build_model()
-        dtype = model.dtype
-        model = model.build_model()
-        args.unfreeze = len(model.layers) if args.unfreeze == 0 else args.unfreeze
-        args.model = args.model + "_custom"
-    else:
-        dtype = tf.float32
-
-    # Freeze / Unfreeze Layers
-    if args.unfreeze == 0:
-        model.trainable = False
-    elif args.unfreeze < 0:
-        model.trainable = True
-    else:
-        model.trainable = True
-        for i in range(0, len(model.layers)-args.unfreeze):
-            model.layers[i].trainable = False
-
-    # Append Custom Top Layer if needed.
-    if append_top_layer:
-        if args.top_layer == "gap":
-            conv2d = tf.keras.layers.Conv2D(n_classes, 1, padding='SAME', activation=None, dtype=dtype)(model.output)
-            conv2d = tf.keras.layers.BatchNormalization(dtype=dtype)(conv2d)
-            conv2d = tf.keras.layers.ReLU(name="final_block_activation", dtype=dtype)(conv2d)
-
-            output = tf.keras.layers.GlobalAveragePooling2D(dtype=dtype)(conv2d)
-            output = tf.keras.layers.Softmax(name="out_dense")(output)
+        if type(model) != tf.keras.models.Model:
+            # Custom Model require to call build_model()
+            dtype = model.dtype
+            model = model.build_model()
+            args.unfreeze = len(model.layers) if args.unfreeze == 0 else args.unfreeze
+            args.model = args.model + "_custom"
         else:
-            output = tf.keras.layers.Flatten()(model.output)
-            output = tf.keras.layers.Dense(n_classes, name="final_block_activation", dtype=dtype)(output)
-            output = tf.keras.layers.Softmax(name="out_dense")(output)
+            dtype = tf.float32
 
-        n_model = tf.keras.models.Model(model.input, output)
-    else:
-        n_model = model
+        # Freeze / Unfreeze Layers
+        if args.unfreeze == 0:
+            model.trainable = False
+        elif args.unfreeze < 0:
+            model.trainable = True
+        else:
+            model.trainable = True
+            for i in range(0, len(model.layers)-args.unfreeze):
+                model.layers[i].trainable = False
+
+        # Append Custom Top Layer if needed.
+        if append_top_layer:
+            if args.top_layer == "gap":
+                conv2d = tf.keras.layers.Conv2D(n_classes, 1, padding='SAME', activation=None, dtype=dtype)(model.output)
+                conv2d = tf.keras.layers.BatchNormalization(dtype=dtype)(conv2d)
+                conv2d = tf.keras.layers.ReLU(name="final_block_activation", dtype=dtype)(conv2d)
+
+                output = tf.keras.layers.GlobalAveragePooling2D(dtype=dtype)(conv2d)
+                output = tf.keras.layers.Softmax(name="out_dense")(output)
+            else:
+                output = tf.keras.layers.Flatten()(model.output)
+                output = tf.keras.layers.Dense(n_classes, name="final_block_activation", dtype=dtype)(output)
+                output = tf.keras.layers.Softmax(name="out_dense")(output)
+
+            n_model = tf.keras.models.Model(model.input, output)
+        else:
+            n_model = model
 
     n_model.summary()
 
@@ -252,122 +253,123 @@ if __name__ == "__main__":
         augmentation_func = augment.DeepInAirPolicy()
         augment_in_dtype = "numpy"
 
-    # Dataset Generator
-    preprocess_func = preprocessing.get_preprocess_by_model_name(args.model)
-    train_gen = KProductsTFGenerator(train_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
-                                     shuffle=True, image_size=(args.img_h, args.img_w),
-                                     augment_func=augmentation_func, augment_in_dtype=augment_in_dtype,
-                                     preprocess_func=preprocess_func, prefetch=args.prefetch, use_cache=args.use_cache,
-                                     load_all=args.load_all, data_format=args.data_format)
-    test_gen = KProductsTFGenerator(test_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
-                                    shuffle=False, image_size=(args.img_h, args.img_w), prefetch=args.prefetch, use_cache=True,
-                                    preprocess_func=preprocess_func, augment_in_dtype=augment_in_dtype,
-                                    load_all=args.load_all, data_format=args.data_format)
+    with strategy.scope():
+        # Dataset Generator
+        preprocess_func = preprocessing.get_preprocess_by_model_name(args.model)
+        train_gen = KProductsTFGenerator(train_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
+                                         shuffle=True, image_size=(args.img_h, args.img_w),
+                                         augment_func=augmentation_func, augment_in_dtype=augment_in_dtype,
+                                         preprocess_func=preprocess_func, prefetch=args.prefetch, use_cache=args.use_cache,
+                                         load_all=args.load_all, data_format=args.data_format)
+        test_gen = KProductsTFGenerator(test_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
+                                        shuffle=False, image_size=(args.img_h, args.img_w), prefetch=args.prefetch, use_cache=True,
+                                        preprocess_func=preprocess_func, augment_in_dtype=augment_in_dtype,
+                                        load_all=args.load_all, data_format=args.data_format)
 
-    train_set = train_gen.get_tf_dataset(args.batch)
-    test_set = test_gen.get_tf_dataset(args.batch)
+        train_set = train_gen.get_tf_dataset(args.batch)
+        test_set = test_gen.get_tf_dataset(args.batch)
 
-    n_train = train_gen.annotation.shape[0]
-    n_test = test_gen.annotation.shape[0]
+        n_train = train_gen.annotation.shape[0]
+        n_test = test_gen.annotation.shape[0]
 
-    print("n_train: {:,}, n_test: {:,}".format(n_train, n_test))
+        print("n_train: {:,}, n_test: {:,}".format(n_train, n_test))
 
-    tboard_path = args.tboard_root
-    model_out_idx = -1
-    geometric_f1score = F1ScoreMetric(n_classes=n_classes, debug=args.debug, name="geometric_f1score", f1_method='geometric')
-    macro_f1score = F1ScoreMetric(n_classes=n_classes, debug=args.debug, name="macro_f1score", f1_method='macro')
+        tboard_path = args.tboard_root
+        model_out_idx = -1
+        geometric_f1score = F1ScoreMetric(n_classes=n_classes, debug=args.debug, name="geometric_f1score", f1_method='geometric')
+        macro_f1score = F1ScoreMetric(n_classes=n_classes, debug=args.debug, name="macro_f1score", f1_method='macro')
 
-    if args.distill:
-        teacher_f_name = args.teacher.split("/")[-1]
+        if args.distill:
+            teacher_f_name = args.teacher.split("/")[-1]
 
-        print(f"{'=' * 10}   Distillation   {'=' * 10}")
-        print(f"{'=' * 10}   Teacher: {teacher_f_name}   {'=' * 10}")
+            print(f"{'=' * 10}   Distillation   {'=' * 10}")
+            print(f"{'=' * 10}   Teacher: {teacher_f_name}   {'=' * 10}")
 
-        try:
-            teacher_model = tf.keras.models.load_model(args.teacher)
-        except:
-            print("Loading Teacher Model Failed at {}".format(args.teacher))
-            print("Please specify teacher model file path by --teacher model_path")
-            exit(0)
+            try:
+                teacher_model = tf.keras.models.load_model(args.teacher)
+            except:
+                print("Loading Teacher Model Failed at {}".format(args.teacher))
+                print("Please specify teacher model file path by --teacher model_path")
+                exit(0)
 
-        distiller = DistillationModel(teacher_model, n_model, temperature=args.temperature, debug=args.debug)
+            distiller = DistillationModel(teacher_model, n_model, temperature=args.temperature, debug=args.debug)
 
-        out_name = n_model.output.name.split("/")[0]
+            out_name = n_model.output.name.split("/")[0]
 
-        if not args.skip_teacher_eval:
-            distiller.evaluate_teacher(test_set=test_set)
-            print("Teacher Model Loss: {:.5f}, Accuracy: {:.5f}".format(distiller.teacher_loss, distiller.teacher_accuracy))
+            if not args.skip_teacher_eval:
+                distiller.evaluate_teacher(test_set=test_set)
+                print("Teacher Model Loss: {:.5f}, Accuracy: {:.5f}".format(distiller.teacher_loss, distiller.teacher_accuracy))
 
-        distiller.build_model()
-        distiller.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr))
-        n_model = distiller.distill_model
+            distiller.build_model()
+            distiller.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr))
+            n_model = distiller.distill_model
 
-        model_out_idx = 0
-        save_metric = f"val_{out_name}_accuracy_student"
-        tboard_path += "/distill_{}_to_{}_".format(teacher_f_name, args.model)
-    elif args.self_distill:
-        print(f"{'=' * 10}   Self-Distillation   {'=' * 10}")
-        print(f"{'=' * 10}   Target Model: {args.model}   {'=' * 10}")
+            model_out_idx = 0
+            save_metric = f"val_{out_name}_accuracy_student"
+            tboard_path += "/distill_{}_to_{}_".format(teacher_f_name, args.model)
+        elif args.self_distill:
+            print(f"{'=' * 10}   Self-Distillation   {'=' * 10}")
+            print(f"{'=' * 10}   Target Model: {args.model}   {'=' * 10}")
 
-        distill_param_dict = {
-            tf.keras.applications.ResNet50: (['conv2_block3_out', 'conv3_block4_out', 'conv4_block6_out'], 2048, 'conv5_block3_out'),
-            tf.keras.applications.ResNet50V2: (['conv2_block3_1_relu', 'conv3_block4_1_relu', 'conv4_block6_1_relu'], 2048, 'post_relu'),
-            tf.keras.applications.MobileNet: (['conv_pw_3_relu', 'conv_pw_5_relu', 'conv_pw_11_relu'], 1024, 'conv_pw_13_relu'),
-            tf.keras.applications.MobileNetV2: (['block_3_expand_relu', 'block_6_expand_relu', 'block_13_expand_relu'], 1280, 'out_relu'),
-            resnet.ResNet18: (['resblock_0_1_activation_1', 'resblock_1_1_activation_1', 'resblock_2_1_activation_1'], 512, 'resblock_3_1_activation_1'),
-            resnet.ResNet10: (['resblock_0_0_activation_1', 'resblock_1_0_activation_1', 'resblock_2_0_activation_1'], 512, 'resblock_3_0_activation_1')
-        }
-        if TargetModel not in distill_param_dict.keys():
-            print("Current Supported Models")
-            support_models = list(distill_param_dict.keys())
-            print(", ".join([support_models[i].__name__ for i in range(len(support_models))]))
+            distill_param_dict = {
+                tf.keras.applications.ResNet50: (['conv2_block3_out', 'conv3_block4_out', 'conv4_block6_out'], 2048, 'conv5_block3_out'),
+                tf.keras.applications.ResNet50V2: (['conv2_block3_1_relu', 'conv3_block4_1_relu', 'conv4_block6_1_relu'], 2048, 'post_relu'),
+                tf.keras.applications.MobileNet: (['conv_pw_3_relu', 'conv_pw_5_relu', 'conv_pw_11_relu'], 1024, 'conv_pw_13_relu'),
+                tf.keras.applications.MobileNetV2: (['block_3_expand_relu', 'block_6_expand_relu', 'block_13_expand_relu'], 1280, 'out_relu'),
+                resnet.ResNet18: (['resblock_0_1_activation_1', 'resblock_1_1_activation_1', 'resblock_2_1_activation_1'], 512, 'resblock_3_1_activation_1'),
+                resnet.ResNet10: (['resblock_0_0_activation_1', 'resblock_1_0_activation_1', 'resblock_2_0_activation_1'], 512, 'resblock_3_0_activation_1')
+            }
+            if TargetModel not in distill_param_dict.keys():
+                print("Current Supported Models")
+                support_models = list(distill_param_dict.keys())
+                print(", ".join([support_models[i].__name__ for i in range(len(support_models))]))
 
-        out_layer_names, final_n_filter, final_feat_layer_name = distill_param_dict[TargetModel]
-        self_distiller = SelfDistillationModel(n_model, out_layer_names, final_n_filter, final_feat_layer_name, temperature=args.temperature)
-        self_distiller.build_model()
-        self_distiller.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr))
+            out_layer_names, final_n_filter, final_feat_layer_name = distill_param_dict[TargetModel]
+            self_distiller = SelfDistillationModel(n_model, out_layer_names, final_n_filter, final_feat_layer_name, temperature=args.temperature)
+            self_distiller.build_model()
+            self_distiller.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr))
 
-        out_name = n_model.output.name.split("/")[0]
+            out_name = n_model.output.name.split("/")[0]
 
-        model_out_idx = 0
-        n_model = self_distiller.distill_model
-        save_metric = f"val_{out_name}_metric_out_accuracy"
-        tboard_path += "/self_distill_{}_".format(args.model)
-    else:
-        print(f"{'=' * 10}   Base Model Training   {'=' * 10}")
-        print(f"{'=' * 10}   Target Model: {args.model}   {'=' * 10}")
-
-        n_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
-                        loss='sparse_categorical_crossentropy', metrics=['accuracy', geometric_f1score, macro_f1score])
-        save_metric = 'val_accuracy'
-        tboard_path += "/{}_".format(args.model)
-
-    if args.weights != "":
-        n_model.load_weights(args.weights)
-
-    if args.test_only:
-        if args.model.startswith("ensemble"):
-            target_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr), loss='sparse_categorical_crossentropy')
-            target_model.evaluate(test_set, eval_ensemble=True)
-            target_model.evaluate(test_set, eval_ensemble=False)
+            model_out_idx = 0
+            n_model = self_distiller.distill_model
+            save_metric = f"val_{out_name}_metric_out_accuracy"
+            tboard_path += "/self_distill_{}_".format(args.model)
         else:
-            n_model.evaluate(test_set)
-        exit()
+            print(f"{'=' * 10}   Base Model Training   {'=' * 10}")
+            print(f"{'=' * 10}   Target Model: {args.model}   {'=' * 10}")
 
-    tboard_callback = False if args.no_tensorboard_writing else True
+            n_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
+                            loss='sparse_categorical_crossentropy', metrics=['accuracy', geometric_f1score, macro_f1score])
+            save_metric = 'val_accuracy'
+            tboard_path += "/{}_".format(args.model)
 
-    y_test = np.array([test_gen.reverse_label[y] for y in test_annotation[dataset_config['class_key']].values])
-    callbacks, tboard_root = get_tf_callbacks(tboard_path, tboard_callback=True, tboard_profile_batch=args.tboard_profile, tboard_update_freq=args.tboard_update_freq,
-                                              confuse_callback=tboard_callback, test_dataset=test_set, save_metric=save_metric, model_out_idx=model_out_idx,
-                                              label_info=list(dataset_config['label_dict'].values()), y_test=y_test,
-                                              modelsaver_callback=True, save_file_name=args.model,
-                                              earlystop_callback=False,
-                                              sparsity_callback=tboard_callback, sparsity_threshold=0.05)
+        if args.weights != "":
+            n_model.load_weights(args.weights)
 
-    if not args.no_tensorboard:
-        run_tensorboard(tboard_root, host=args.tboard_host, port=args.tboard_port)
+        if args.test_only:
+            if args.model.startswith("ensemble"):
+                target_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr), loss='sparse_categorical_crossentropy')
+                target_model.evaluate(test_set, eval_ensemble=True)
+                target_model.evaluate(test_set, eval_ensemble=False)
+            else:
+                n_model.evaluate(test_set)
+            exit()
 
-    n_model.fit(train_set, epochs=args.epochs, validation_data=test_set, callbacks=callbacks)
+        tboard_callback = False if args.no_tensorboard_writing else True
+
+        y_test = np.array([test_gen.reverse_label[y] for y in test_annotation[dataset_config['class_key']].values])
+        callbacks, tboard_root = get_tf_callbacks(tboard_path, tboard_callback=True, tboard_profile_batch=args.tboard_profile, tboard_update_freq=args.tboard_update_freq,
+                                                  confuse_callback=tboard_callback, test_dataset=test_set, save_metric=save_metric, model_out_idx=model_out_idx,
+                                                  label_info=list(dataset_config['label_dict'].values()), y_test=y_test,
+                                                  modelsaver_callback=True, save_file_name=args.model,
+                                                  earlystop_callback=False,
+                                                  sparsity_callback=tboard_callback, sparsity_threshold=0.05)
+
+        if not args.no_tensorboard:
+            run_tensorboard(tboard_root, host=args.tboard_host, port=args.tboard_port)
+
+        n_model.fit(train_set, epochs=args.epochs, validation_data=test_set, callbacks=callbacks)
 
     if not args.no_tensorboard:
         wait_ctrl_c()
