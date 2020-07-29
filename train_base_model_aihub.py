@@ -97,6 +97,7 @@ if __name__ == "__main__":
     parser.add_argument("--no-prefetch", dest="prefetch", action='store_false', help="No use prefetch option for dataset")
     parser.add_argument("--no-cache", dest="use_cache", action='store_false', help="No use cache option for dataset")
     parser.add_argument("--test-only", default=False, action='store_true', help="Model test only")
+    parser.add_argument("--multi-gpu", default=False, action='store_true', help="Use multi GPU to train")
     parser.add_argument("-en", "--ensemble-models", nargs="*")
 
     args = parser.parse_args()
@@ -137,8 +138,11 @@ if __name__ == "__main__":
         for i, model_name in enumerate(model_dict.keys()):
             print("{:02d}: {}".format(i+1, model_name))
         exit(0)
-
-    allow_gpu_memory_growth()
+    if args.multi_gpu:
+        strategy = tf.distribute.MirroredStrategy()
+        print("Device number: {}".format(strategy.num_replicas_in_sync))
+    else:
+        allow_gpu_memory_growth()
 
     # Setting model parameters
     kwargs = {'input_shape': (args.img_h, args.img_w, 3), 'include_top': False, 'weights': 'imagenet'}
