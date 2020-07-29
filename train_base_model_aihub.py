@@ -99,8 +99,11 @@ if __name__ == "__main__":
     parser.add_argument("--test-only", default=False, action='store_true', help="Model test only")
     parser.add_argument("--multi-gpu", default=False, action='store_true', help="Use multi GPU to train")
     parser.add_argument("-en", "--ensemble-models", nargs="*")
+    parser.add_argument("--multi-worker", default=8, type=int, help="Worker number of set_inter_op_parallelism_threads")
 
     args = parser.parse_args()
+
+    tf.config.threading.set_inter_op_parallelism_threads(args.multi_worker)
 
     np.random.seed(args.seed)
     tf.random.set_seed(args.seed)
