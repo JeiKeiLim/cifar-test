@@ -115,7 +115,7 @@ class DenseReduce:
                                             name=f"{name}_conv1")
         self.activation = Activation(name=f"{name}_act", dtype=dtype)
         self.reduce = tf.keras.layers.AveragePooling2D(downsample_kernel_size, downsample_strides, padding=padding,
-                                                       data_format = data_format,
+                                                       data_format=data_format,
                                                        name=f"{name}_reduce")
 
     def __call__(self, layer):
