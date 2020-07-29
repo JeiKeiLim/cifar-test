@@ -347,7 +347,7 @@ if __name__ == "__main__":
 
             n_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
                             loss='sparse_categorical_crossentropy', metrics=['accuracy', geometric_f1score, macro_f1score])
-            save_metric = 'val_accuracy'
+            save_metric = 'val_geometric_f1score'
             tboard_path += "/{}_".format(args.model)
 
         if args.weights != "":
