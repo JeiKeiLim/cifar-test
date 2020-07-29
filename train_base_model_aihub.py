@@ -268,11 +268,13 @@ if __name__ == "__main__":
                                          augment_func=augmentation_func, augment_in_dtype=augment_in_dtype,
                                          preprocess_func=preprocess_func, prefetch=args.prefetch, use_cache=args.use_cache,
                                          load_all=args.load_all, data_format=args.data_format)
+
         test_gen = KProductsTFGenerator(test_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
-                                        shuffle=False, image_size=(args.img_h, args.img_w), prefetch=args.prefetch, use_cache=True,
-                                        preprocess_func=preprocess_func,
+                                        shuffle=False, image_size=(args.img_h, args.img_w),
                                         augment_func=augmentation_func if args.augment_test else None, augment_in_dtype=augment_in_dtype,
-                                        load_all=args.load_all, data_format=args.data_format)
+                                        preprocess_func=preprocess_func, prefetch=args.prefetch,
+                                        load_all=args.load_all, data_format=args.data_format, use_cache=args.use_cache,
+                                        )
 
         train_set = train_gen.get_tf_dataset(args.batch)
         test_set = test_gen.get_tf_dataset(args.batch)
@@ -367,10 +369,11 @@ if __name__ == "__main__":
         tboard_callback = False if args.no_tensorboard_writing else True
 
         y_test = np.array([test_gen.reverse_label[y] for y in test_annotation[dataset_config['class_key']].values])
-        callbacks, tboard_root = get_tf_callbacks(tboard_path, tboard_callback=True, tboard_profile_batch=args.tboard_profile, tboard_update_freq=args.tboard_update_freq,
+        callbacks, tboard_root = get_tf_callbacks(tboard_path, tboard_callback=True, tboard_profile_batch=args.tboard_profile,
+                                                  tboard_update_freq=args.tboard_update_freq,
                                                   confuse_callback=tboard_callback, test_dataset=test_set, save_metric=save_metric, model_out_idx=model_out_idx,
                                                   label_info=list(dataset_config['label_dict'].values()), y_test=y_test,
-                                                  modelsaver_callback=True, save_file_name=args.model,
+                                                  modelsaver_callback=True, save_file_name=args.model, metric_type="score",
                                                   earlystop_callback=False,
                                                   sparsity_callback=tboard_callback, sparsity_threshold=0.05)
 
