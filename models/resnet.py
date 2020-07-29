@@ -43,7 +43,8 @@ class ResNet:
 
         if self.n_classes > 0:
             layer = tf.keras.layers.GlobalAveragePooling2D(name="global_avg_pool", dtype=self.dtype,)(layer)
-            layer = tf.keras.layers.Dense(self.n_classes, activation='softmax', use_bias=True, name="out_dense")(layer)
+            layer = tf.keras.layers.Dense(self.n_classes, activation=None, use_bias=True, name="out_dense")(layer)
+            layer = tf.keras.layers.Softmax()(layer)
 
         return layer
 
