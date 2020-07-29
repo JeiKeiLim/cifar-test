@@ -75,7 +75,9 @@ class MicroJKNet:
         return layers
 
     def reduce_block(self, x, compression_rate=2, name="reduce_block"):
-        n_filter = int(x.shape[-1] // compression_rate)
+        channel_idx = 3 if self.data_format == "channels_last" else 1
+
+        n_filter = int(x.shape[channel_idx] // compression_rate)
         x = DenseReduce(n_filter, downsample_kernel_size=self.reduce_kernel_size,
                         data_format=self.data_format,
                         Activation=self.Activation, name=name, dtype=self.dtype)(x)

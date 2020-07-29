@@ -97,9 +97,8 @@ if __name__ == "__main__":
     parser.add_argument("--no-prefetch", dest="prefetch", action='store_false', help="No use prefetch option for dataset")
     parser.add_argument("--no-cache", dest="use_cache", action='store_false', help="No use cache option for dataset")
     parser.add_argument("--test-only", default=False, action='store_true', help="Model test only")
-    parser.add_argument("--multi-gpu", default=False, action='store_true', help="Use multi GPU to train")
-    parser.add_argument("-en", "--ensemble-models", nargs="*")
     parser.add_argument("--multi-worker", default=8, type=int, help="Worker number of set_inter_op_parallelism_threads")
+    parser.add_argument("-en", "--ensemble-models", nargs="*")
 
     args = parser.parse_args()
 
