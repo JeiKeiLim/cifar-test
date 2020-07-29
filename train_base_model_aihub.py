@@ -102,6 +102,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    tf.config.threading.set_inter_op_parallelism_threads(args.multi_worker)
+
     np.random.seed(args.seed)
     tf.random.set_seed(args.seed)
 
@@ -138,11 +140,8 @@ if __name__ == "__main__":
         for i, model_name in enumerate(model_dict.keys()):
             print("{:02d}: {}".format(i+1, model_name))
         exit(0)
-    if args.multi_gpu:
-        strategy = tf.distribute.MirroredStrategy()
-        print("Device number: {}".format(strategy.num_replicas_in_sync))
-    else:
-        allow_gpu_memory_growth()
+
+    allow_gpu_memory_growth()
 
     # Setting model parameters
     kwargs = {'input_shape': (args.img_h, args.img_w, 3), 'include_top': False, 'weights': 'imagenet'}
