@@ -85,6 +85,7 @@ if __name__ == "__main__":
     parser.add_argument("--expansion", default=4, type=int, help="MicroJKNet Expansion")
     parser.add_argument("--augment", default="none", type=str, help="Augmentation Method. (auto, album, tf, none)")
     parser.add_argument("--augment-policy", default="imagenet", type=str, help="Augmentation Policy. (imagenet, cifar10, svhn)")
+    parser.add_argument("--augment-test", default=False, action='store_true', help="Apply Augmentation on Test set")
     parser.add_argument("--activation", default="relu", type=str, help="Activation Function (relu, swish, hswish)")
     parser.add_argument("--dropout", default=0.0, type=float, help="Dropout probability. (MicroJKNet Only)")
     parser.add_argument("--conv", default="conv2d", type=str, help="Convolution Type. (conv2d, sep-conv). (MicroJKNet Only)")
@@ -269,7 +270,8 @@ if __name__ == "__main__":
                                          load_all=args.load_all, data_format=args.data_format)
         test_gen = KProductsTFGenerator(test_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
                                         shuffle=False, image_size=(args.img_h, args.img_w), prefetch=args.prefetch, use_cache=True,
-                                        preprocess_func=preprocess_func, augment_in_dtype=augment_in_dtype,
+                                        preprocess_func=preprocess_func,
+                                        augment_func=augmentation_func if args.augment_test else None, augment_in_dtype=augment_in_dtype,
                                         load_all=args.load_all, data_format=args.data_format)
 
         train_set = train_gen.get_tf_dataset(args.batch)
