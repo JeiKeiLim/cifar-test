@@ -101,6 +101,9 @@ if __name__ == "__main__":
     parser.add_argument("-en", "--ensemble-models", nargs="*")
     parser.add_argument("--multi-gpu", default=False, action='store_true', help="Use multi GPU to train")
     parser.add_argument("--multi-worker", default=8, type=int, help="Worker number of set_inter_op_parallelism_threads")
+    parser.add_argument("--save-metric", default="val_geometric_f1score", help="Auto model save metric")
+    parser.add_argument("--metric-type", default="score", help="Metric type (loss, score)")
+
 
     args = parser.parse_args()
 
@@ -316,6 +319,7 @@ if __name__ == "__main__":
 
             model_out_idx = 0
             save_metric = f"val_{out_name}_accuracy_student"
+            metric_type = "score"
             tboard_path += "/distill_{}_to_{}_".format(teacher_f_name, args.model)
         elif args.self_distill:
             print(f"{'=' * 10}   Self-Distillation   {'=' * 10}")
@@ -344,6 +348,7 @@ if __name__ == "__main__":
             model_out_idx = 0
             n_model = self_distiller.distill_model
             save_metric = f"val_{out_name}_metric_out_accuracy"
+            metric_type = "score"
             tboard_path += "/self_distill_{}_".format(args.model)
         else:
             print(f"{'=' * 10}   Base Model Training   {'=' * 10}")
@@ -351,7 +356,8 @@ if __name__ == "__main__":
 
             n_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
                             loss='sparse_categorical_crossentropy', metrics=['accuracy', geometric_f1score, macro_f1score])
-            save_metric = 'val_geometric_f1score'
+            save_metric = args.save_metric
+            metric_type = args.metric_type
             tboard_path += "/{}_".format(args.model)
 
         if args.weights != "":
@@ -373,7 +379,7 @@ if __name__ == "__main__":
                                                   tboard_update_freq=args.tboard_update_freq,
                                                   confuse_callback=tboard_callback, test_dataset=test_set, save_metric=save_metric, model_out_idx=model_out_idx,
                                                   label_info=list(dataset_config['label_dict'].values()), y_test=y_test,
-                                                  modelsaver_callback=True, save_file_name=args.model, metric_type="score",
+                                                  modelsaver_callback=True, save_file_name=args.model, metric_type=metric_type,
                                                   earlystop_callback=False,
                                                   sparsity_callback=tboard_callback, sparsity_threshold=0.05)
 
