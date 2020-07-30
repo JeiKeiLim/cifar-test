@@ -5,7 +5,7 @@ import argparse
 from tfhelper.tensorboard import get_tf_callbacks, run_tensorboard, wait_ctrl_c
 from tfhelper.gpu import allow_gpu_memory_growth
 from tfhelper.metrics import F1ScoreMetric
-from models import resnet, DistillationModel, SelfDistillationModel, microjknet, activations, logistic, ensemble_model
+from models import resnet, DistillationModel, SelfDistillationModel, microjknet, activations, logistic, ensemble_model, TTAModel
 import json
 import pandas as pd
 import numpy as np
@@ -103,7 +103,11 @@ if __name__ == "__main__":
     parser.add_argument("--multi-worker", default=8, type=int, help="Worker number of set_inter_op_parallelism_threads")
     parser.add_argument("--save-metric", default="val_geometric_f1score", help="Auto model save metric")
     parser.add_argument("--metric-type", default="score", help="Metric type (loss, score)")
-
+    parser.add_argument("--tta", default=False, action='store_true', help="Use Test Time Augmentation")
+    parser.add_argument("--n-tta", default=3, type=int, help="Number of augmentation in TTA")
+    parser.add_argument("--tta-softmax", dest="tta_softmax", default=True, help="Use softmax to predict class in TTA")
+    parser.add_argument("--no-tta-softmax", dest="tta_softmax", action='store_false', help="No use softmax to predict class in TTA. Intead, use sum of softmaxes")
+    parser.add_argument("--tta-mp", default=False, action='store_true', help="Use Multiprocess for TTA pipeline")
 
     args = parser.parse_args()
 
@@ -114,7 +118,7 @@ if __name__ == "__main__":
 
     sys.path.extend([args.dataset_lib])
 
-    from dataset.tfkeras import KProductsTFGenerator
+    from dataset.tfkeras import KProductsTFGenerator, KProductsTFGeneratorTTA
     from dataset.tfkeras import preprocessing
     from dataset import augment
 
@@ -243,6 +247,10 @@ if __name__ == "__main__":
         else:
             n_model = model
 
+        if args.tta:
+            tta = TTAModel(n_model, n_tta=args.n_tta, use_softmax=args.tta_softmax)
+            n_model = tta.build_model()
+
     n_model.summary()
 
     print("=" * 50)
@@ -260,24 +268,39 @@ if __name__ == "__main__":
         augmentation_func = augment.DeepInAirPolicy()
         augment_in_dtype = "numpy"
     elif args.augment == "tf":
-        augmentation_func = augment.TFAugmentPolicy()
+        augmentation_func = augment.TFAugmentPolicy(data_format=args.data_format)
         augment_in_dtype = "tensor"
 
     with strategy.scope():
         # Dataset Generator
         preprocess_func = preprocessing.get_preprocess_by_model_name(args.model)
-        train_gen = KProductsTFGenerator(train_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
-                                         shuffle=True, image_size=(args.img_h, args.img_w),
-                                         augment_func=augmentation_func, augment_in_dtype=augment_in_dtype,
-                                         preprocess_func=preprocess_func, prefetch=args.prefetch, use_cache=args.use_cache,
-                                         load_all=args.load_all, data_format=args.data_format)
 
-        test_gen = KProductsTFGenerator(test_annotation, dataset_config['label_dict'], dataset_config['dataset_root'],
-                                        shuffle=False, image_size=(args.img_h, args.img_w),
-                                        augment_func=augmentation_func if args.augment_test else None, augment_in_dtype=augment_in_dtype,
-                                        preprocess_func=preprocess_func, prefetch=args.prefetch,
-                                        load_all=args.load_all, data_format=args.data_format, use_cache=args.use_cache,
-                                        )
+        generator_args = [train_annotation, dataset_config['label_dict'], dataset_config['dataset_root']]
+        kwargs = {
+            "shuffle": True,
+            "image_size": (args.img_h, args.img_w),
+            "augment_func": augmentation_func,
+            "augment_in_dtype": augment_in_dtype,
+            "preprocess_func": preprocess_func,
+            "prefetch": args.prefetch,
+            "use_cache": args.use_cache,
+            "load_all": args.load_all,
+            "data_format": args.data_format
+        }
+        if args.tta:
+            kwargs['n_tta'] = args.n_tta
+            kwargs['multiprocess'] = args.tta_mp
+            Generator = KProductsTFGeneratorTTA
+        else:
+            Generator = KProductsTFGenerator
+
+        train_gen = Generator(*generator_args, **kwargs)
+
+        generator_args[0] = test_annotation
+        kwargs['augment_func'] = augmentation_func if args.augment_test or args.tta else None
+        kwargs['shuffle'] = False
+
+        test_gen = Generator(*generator_args, **kwargs)
 
         train_set = train_gen.get_tf_dataset(args.batch)
         test_set = test_gen.get_tf_dataset(args.batch)
@@ -361,7 +384,10 @@ if __name__ == "__main__":
             tboard_path += "/{}_".format(args.model)
 
         if args.weights != "":
-            n_model.load_weights(args.weights)
+            if args.tta:
+                tta.load_weights(args.weights)
+            else:
+                n_model.load_weights(args.weights)
 
         if args.test_only:
             if args.model.startswith("ensemble"):
@@ -380,6 +406,7 @@ if __name__ == "__main__":
                                                   confuse_callback=tboard_callback, test_dataset=test_set, save_metric=save_metric, model_out_idx=model_out_idx,
                                                   label_info=list(dataset_config['label_dict'].values()), y_test=y_test,
                                                   modelsaver_callback=True, save_file_name=args.model, metric_type=metric_type,
+                                                  save_func=tta.save if args.tta else None,
                                                   earlystop_callback=False,
                                                   sparsity_callback=tboard_callback, sparsity_threshold=0.05)
 
