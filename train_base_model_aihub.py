@@ -58,6 +58,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch", default=8, type=int, help="Batch Size.")
     parser.add_argument("--epochs", default=1000, type=int, help="Epochs.")
     parser.add_argument("--weights", default="", type=str, help="Weight path to load. If not given, training begins from scratch with imagenet base weights")
+    parser.add_argument("--weights-no-build", default=False, action='store_true', help="Skip model building. Load saved model only.")
     parser.add_argument("--summary", dest="summary", action="store_true", default=False, help="Display a summary of the model and exit")
     parser.add_argument("--img_w", default=64, type=int, help="Image Width")
     parser.add_argument("--img_h", default=48, type=int, help="Image Height")
@@ -144,7 +145,7 @@ if __name__ == "__main__":
     if args.model in model_dict.keys():
         TargetModel = model_dict[args.model]
 
-    if TargetModel is None:
+    if TargetModel is None and args.weights_no_build is False:
         print("Supported Model List")
         for i, model_name in enumerate(model_dict.keys()):
             print("{:02d}: {}".format(i+1, model_name))
@@ -207,17 +208,25 @@ if __name__ == "__main__":
 
     # Build Model
     with strategy.scope():
-        target_model = TargetModel(**kwargs)
-        model = target_model
-
-        if type(model) != tf.keras.models.Model:
-            # Custom Model require to call build_model()
-            dtype = model.dtype
-            model = model.build_model()
+        if args.weights_no_build:
+            model = tf.keras.models.load_model(args.weights)
+            args.data_format = "channels_last" if model.input.shape[-1] == 3 else "channels_first"
+            args.img_h = model.input.shape[1] if args.data_format == "channels_last" else model.input.shape[2]
+            args.img_w = model.input.shape[2] if args.data_format == "channels_last" else model.input.shape[3]
             args.unfreeze = len(model.layers) if args.unfreeze == 0 else args.unfreeze
-            args.model = args.model + "_custom"
+            append_top_layer = False
         else:
-            dtype = tf.float32
+            target_model = TargetModel(**kwargs)
+            model = target_model
+
+            if type(model) != tf.keras.models.Model:
+                # Custom Model require to call build_model()
+                dtype = model.dtype
+                model = model.build_model()
+                args.unfreeze = len(model.layers) if args.unfreeze == 0 else args.unfreeze
+                args.model = args.model + "_custom"
+            else:
+                dtype = tf.float32
 
         # Freeze / Unfreeze Layers
         if args.unfreeze == 0:
