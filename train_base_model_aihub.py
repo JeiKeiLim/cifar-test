@@ -198,7 +198,9 @@ if __name__ == "__main__":
             kwargs.pop("weights")
             append_top_layer = False
         elif issubclass(TargetModel, ensemble_model.EnsembleModel):
-            ensemble_models = [tf.keras.models.load_model(path) for path in args.ensemble_models]
+            with strategy.scope():
+                ensemble_models = [tf.keras.models.load_model(path) for path in args.ensemble_models]
+                
             kwargs['models'] = ensemble_models
             kwargs.pop("include_top")
             kwargs.pop("weights")
