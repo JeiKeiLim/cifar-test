@@ -109,6 +109,7 @@ if __name__ == "__main__":
     parser.add_argument("--tta-softmax", dest="tta_softmax", default=True, help="Use softmax to predict class in TTA")
     parser.add_argument("--no-tta-softmax", dest="tta_softmax", action='store_false', help="No use softmax to predict class in TTA. Intead, use sum of softmaxes")
     parser.add_argument("--tta-mp", default=False, action='store_true', help="Use Multiprocess for TTA pipeline")
+    parser.add_argument("--batch-save", default=False, action='store_true', help="Save model on each batch end")
 
     args = parser.parse_args()
 
@@ -417,7 +418,7 @@ if __name__ == "__main__":
                                                   confuse_callback=tboard_callback, test_dataset=test_set, save_metric=save_metric, model_out_idx=model_out_idx,
                                                   label_info=list(dataset_config['label_dict'].values()), y_test=y_test,
                                                   modelsaver_callback=True, save_file_name=args.model, metric_type=metric_type,
-                                                  save_func=tta.save if args.tta else None,
+                                                  save_func=tta.save if args.tta else None, batch_save=args.batch_save,
                                                   earlystop_callback=False,
                                                   sparsity_callback=tboard_callback, sparsity_threshold=0.05)
 
