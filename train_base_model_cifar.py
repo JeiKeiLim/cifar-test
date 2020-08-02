@@ -3,12 +3,12 @@ import tensorflow as tf
 import efficientnet.tfkeras as efn
 import argparse
 from tfhelper.tensorboard import get_tf_callbacks, run_tensorboard, wait_ctrl_c
-from tfhelper.gpu import allow_gpu_memory_growth
 from tfhelper.metrics import F1ScoreMetric
 from models import resnet, DistillationModel, SelfDistillationModel, microjknet, activations, logistic, ensemble_model, TTAModel
 import json
 import pandas as pd
 import numpy as np
+from dataset import augment, CifarGenerator, CifarGeneratorTTA, preprocessing
 
 if __name__ == "__main__":
 
@@ -47,21 +47,25 @@ if __name__ == "__main__":
         "ensemble": ensemble_model.EnsembleModel
     }
 
+    dataset_dict = {
+        "cifar10": tf.keras.datasets.cifar10,
+        "cifar100": tf.keras.datasets.cifar100,
+    }
+
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--dataset-conf", default="./conf/dataset_conf.json", help="Dataset Configuration Path")
-    parser.add_argument("--dataset-lib", default="../aihub_dataset", help="Dataset Library Path")
     parser.add_argument("--model", default="resnet18", type=str, help="Model Name. Supported Models: ({}).".format(
         ", ".join(list(model_dict.keys()))))
+    parser.add_argument("--dataset", default="cifar10", type=str, help="Dataset Name. Supported Dataset: ({}).".format(", ".join(list(dataset_dict.keys()))))
     parser.add_argument("--unfreeze", default=0, type=int, help="A number unfreeze layer. 0: Freeze all. -1: Unfreeze all.")
     parser.add_argument("--top-layer", default="gap", type=str, help="Top Layer Type(gap: 1x1conv->GAP, dense: Flatten->Fully Connected")
     parser.add_argument("--lr", default=0.001, type=float, help="Learning Rate.")
-    parser.add_argument("--batch", default=8, type=int, help="Batch Size.")
+    parser.add_argument("--batch", default=32, type=int, help="Batch Size.")
     parser.add_argument("--epochs", default=1000, type=int, help="Epochs.")
     parser.add_argument("--weights", default="", type=str, help="Weight path to load. If not given, training begins from scratch with imagenet base weights")
     parser.add_argument("--weights-no-build", default=False, action='store_true', help="Skip model building. Load saved model only.")
     parser.add_argument("--summary", dest="summary", action="store_true", default=False, help="Display a summary of the model and exit")
-    parser.add_argument("--img_w", default=64, type=int, help="Image Width")
-    parser.add_argument("--img_h", default=48, type=int, help="Image Height")
+    parser.add_argument("--img_w", default=32, type=int, help="Image Width")
+    parser.add_argument("--img_h", default=32, type=int, help="Image Height")
     parser.add_argument("--resnet-init-channel", default=64, type=int, help="ResNet Initial Channel Number")
     parser.add_argument("--distill", default=False, action='store_true', help="Perform Distillation")
     parser.add_argument("--teacher", default="", type=str, help="Teacher Model Path")
@@ -85,19 +89,14 @@ if __name__ == "__main__":
     parser.add_argument("--compression-rate", default=2.0, type=float, help="MicroJKNet Compression Rate")
     parser.add_argument("--expansion", default=4, type=int, help="MicroJKNet Expansion")
     parser.add_argument("--augment", default="none", type=str, help="Augmentation Method. (auto, album, tf, none)")
-    parser.add_argument("--augment-policy", default="imagenet", type=str, help="Augmentation Policy. (imagenet, cifar10, svhn)")
+    parser.add_argument("--augment-policy", default="cifar", type=str, help="Augmentation Policy. (imagenet, cifar10, svhn)")
     parser.add_argument("--augment-test", default=False, action='store_true', help="Apply Augmentation on Test set")
     parser.add_argument("--activation", default="relu", type=str, help="Activation Function (relu, swish, hswish)")
     parser.add_argument("--dropout", default=0.0, type=float, help="Dropout probability. (MicroJKNet Only)")
     parser.add_argument("--conv", default="conv2d", type=str, help="Convolution Type. (conv2d, sep-conv). (MicroJKNet Only)")
-    parser.add_argument("--load-all", default=False, action='store_true', help="Loading All Dataset into memory.")
-    parser.add_argument("--reduce-dataset-ratio", default=1.0, type=float, help="Reducing dataset image numbers. (0.0 ~ 1.0)")
     parser.add_argument("--data-format", default="channels_last", type=str, help="Data Format (channels_last, channels_first). ((batch, height, width, channel), (batch, channel, height, width))")
     parser.add_argument("--seed", default=7777, type=int, help="Random Seed")
     parser.add_argument("--prefetch", default=True, dest="prefetch", action='store_true', help="Use prefetch option for dataset")
-    parser.add_argument("--use-cache", default=True, dest="use_cache", action='store_true', help="Use prefetch option for dataset")
-    parser.add_argument("--no-prefetch", dest="prefetch", action='store_false', help="No use prefetch option for dataset")
-    parser.add_argument("--no-cache", dest="use_cache", action='store_false', help="No use cache option for dataset")
     parser.add_argument("--test-only", default=False, action='store_true', help="Model test only")
     parser.add_argument("-en", "--ensemble-models", nargs="*")
     parser.add_argument("--multi-gpu", default=False, action='store_true', help="Use multi GPU to train")
@@ -109,7 +108,6 @@ if __name__ == "__main__":
     parser.add_argument("--tta-softmax", dest="tta_softmax", default=True, help="Use softmax to predict class in TTA")
     parser.add_argument("--no-tta-softmax", dest="tta_softmax", action='store_false', help="No use softmax to predict class in TTA. Intead, use sum of softmaxes")
     parser.add_argument("--tta-mp", default=False, action='store_true', help="Use Multiprocess for TTA pipeline")
-    parser.add_argument("--batch-save", default=False, action='store_true', help="Save model on each batch end")
 
     args = parser.parse_args()
 
@@ -118,27 +116,16 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
     tf.random.set_seed(args.seed)
 
-    sys.path.extend([args.dataset_lib])
+    if args.dataset not in dataset_dict.keys():
+        print("Supported Dataset List")
+        for i, dataset_name in enumerate(dataset_dict.keys()):
+            print("{:02d}: {}".format(i + 1, dataset_name))
+        exit(0)
 
-    from dataset.tfkeras import KProductsTFGenerator, KProductsTFGeneratorTTA
-    from dataset.tfkeras import preprocessing
-    from dataset import augment
+    (x_train, y_train), (x_test, y_test) = dataset_dict[args.dataset].load_data()
+    y_train, y_test = y_train.flatten(), y_test.flatten()
 
-    with open(args.dataset_conf, 'r', encoding='UTF8') as f:
-        dataset_config = json.load(f)
-
-    train_annotation = pd.read_csv(dataset_config['train_annotation'])
-    test_annotation = pd.read_csv(dataset_config['test_annotation'])
-
-    n_classes = len(dataset_config['label_dict'])
-
-    if args.reduce_dataset_ratio < 1.0:
-        train_annotation = train_annotation.sample(n=int(train_annotation.shape[0] * args.reduce_dataset_ratio), random_state=args.seed).reset_index(drop=True)
-        n_test_by_class = np.ceil(test_annotation.shape[0] * args.reduce_dataset_ratio / n_classes).astype(np.int)
-
-        t_annot = [test_annotation.query("{} == '{}'".format(dataset_config['class_key'], dataset_config['label_dict'][str(i)])) for i in range(len(dataset_config['label_dict']))]
-        test_annotation = pd.concat([annot.sample(n=min(max(n_test_by_class, 1), annot.shape[0]), random_state=args.seed)
-                                   for annot in t_annot])
+    n_classes = np.unique(y_train).shape[0]
 
     # Setting the model
     TargetModel = None
@@ -287,38 +274,34 @@ if __name__ == "__main__":
         # Dataset Generator
         preprocess_func = preprocessing.get_preprocess_by_model_name(args.model)
 
-        generator_args = [train_annotation, dataset_config['label_dict'], dataset_config['dataset_root']]
         kwargs = {
             "shuffle": True,
-            "image_size": (args.img_h, args.img_w),
+            "shuffle_size": args.batch * 2,
+            "image_size": (args.img_w, args.img_h),
             "augment_func": augmentation_func,
             "augment_in_dtype": augment_in_dtype,
             "preprocess_func": preprocess_func,
-            "prefetch": args.prefetch,
-            "use_cache": args.use_cache,
-            "load_all": args.load_all,
             "data_format": args.data_format
         }
         if args.tta:
             kwargs['n_tta'] = args.n_tta
             kwargs['multiprocess'] = args.tta_mp
-            Generator = KProductsTFGeneratorTTA
+            Generator = CifarGeneratorTTA
         else:
-            Generator = KProductsTFGenerator
+            Generator = CifarGenerator
 
-        train_gen = Generator(*generator_args, **kwargs)
+        train_gen = Generator(x_train, y_train, **kwargs)
 
-        generator_args[0] = test_annotation
         kwargs['augment_func'] = augmentation_func if args.augment_test or args.tta else None
         kwargs['shuffle'] = False
 
-        test_gen = Generator(*generator_args, **kwargs)
+        test_gen = Generator(x_test, y_test, **kwargs)
 
         train_set = train_gen.get_tf_dataset(args.batch)
         test_set = test_gen.get_tf_dataset(args.batch)
 
-        n_train = train_gen.annotation.shape[0]
-        n_test = test_gen.annotation.shape[0]
+        n_train = x_train.shape[0]
+        n_test = x_test.shape[0]
 
         print("n_train: {:,}, n_test: {:,}".format(n_train, n_test))
 
@@ -412,13 +395,12 @@ if __name__ == "__main__":
 
         tboard_callback = False if args.no_tensorboard_writing else True
 
-        y_test = np.array([test_gen.reverse_label[y] for y in test_annotation[dataset_config['class_key']].values])
         callbacks, tboard_root = get_tf_callbacks(tboard_path, tboard_callback=True, tboard_profile_batch=args.tboard_profile,
                                                   tboard_update_freq=args.tboard_update_freq,
                                                   confuse_callback=tboard_callback, test_dataset=test_set, save_metric=save_metric, model_out_idx=model_out_idx,
-                                                  label_info=list(dataset_config['label_dict'].values()), y_test=y_test,
+                                                  y_test=y_test,
                                                   modelsaver_callback=True, save_file_name=args.model, metric_type=metric_type,
-                                                  save_func=tta.save if args.tta else None, batch_save=args.batch_save,
+                                                  save_func=tta.save if args.tta else None, batch_save=False,
                                                   earlystop_callback=False,
                                                   sparsity_callback=tboard_callback, sparsity_threshold=0.05)
 
