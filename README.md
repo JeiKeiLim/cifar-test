@@ -213,4 +213,3 @@ optional arguments:
   --tta-mp              Use Multiprocess for TTA pipeline (default: False)
 Process finished with exit code 0
 ```
-
